@@ -9,3 +9,7 @@ pnpm-lock.yaml
 yarn.lock
 npm-debug.log*
 .DS_Store
+scripts/serviceAccountKey.json
+*.pem
+*.key
+.env*
