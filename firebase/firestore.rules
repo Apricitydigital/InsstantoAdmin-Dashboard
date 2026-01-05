@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function hasPermission(permission) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/roles/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roleId)).data.permissions.hasAny([permission]);
+    }
+
+    // Generic helpers
+    function isAuthenticated() { return request.auth != null; }
+
+    // Collections and required permissions
+    match /bookings/{docId} {
+      allow read: if isAuthenticated() && hasPermission('bookings:view');
+      allow write: if isAuthenticated() && hasPermission('bookings:write');
+    }
+
+    match /payments/{docId} {
+      allow read: if isAuthenticated() && hasPermission('payments:view');
+      allow write: if isAuthenticated() && hasPermission('payments:write');
+    }
+
+    match /store/{docId} {
+      allow read: if isAuthenticated() && hasPermission('store:view');
+      allow write: if isAuthenticated() && hasPermission('store:write');
+    }
+
+    match /coupons/{docId} {
+      allow read: if isAuthenticated() && hasPermission('coupons:view');
+      allow write: if isAuthenticated() && hasPermission('coupons:write');
+    }
+
+    match /customers/{docId} {
+      allow read: if isAuthenticated() && hasPermission('customers:view') ;
+      allow write: if isAuthenticated() && hasPermission('customers:write');
+    }
+
+    match /complaints/{docId} {
+      allow read: if isAuthenticated() && hasPermission('complaints:view');
+      allow write: if isAuthenticated() && hasPermission('complaints:write');
+    }
+
+    // Admin management (superadmin only)
+    match /roles/{docId} {
+      allow read: if isAuthenticated() && hasPermission('admin:roles:view');
+      allow write: if isAuthenticated() && hasPermission('admin:roles:write');
+    }
+    match /users/{docId} {
+      allow read: if isAuthenticated() && (request.auth.uid == docId || hasPermission('admin:users:view'));
+      allow write: if isAuthenticated() && hasPermission('admin:users:write');
+    }
+  }
+}
