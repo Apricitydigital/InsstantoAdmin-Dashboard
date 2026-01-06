@@ -103,7 +103,7 @@ export default function BookingStats({ fromDate, toDate }: BookingStatsProps) {
     },
     {
       title: "Cancelled Bookings",
-      value: stats.cancelledBookings.toLocaleString(),
+      value: stats.cancelledByCustomer.toLocaleString(),
       description: "Cancelled After Service Accepted",
       icon: XCircle,
       color: "text-red-600",

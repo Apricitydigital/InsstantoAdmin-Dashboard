@@ -43,7 +43,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
-    "dataconnect-generated": "link:../../AppData/Local/pnpm/global/5/node_modules/src/dataconnect-generated",
     "date-fns": "latest",
     "embla-carousel-react": "8.5.1",
     "firebase": "latest",

@@ -1,5 +1,6 @@
 import { doc, DocumentReference } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
+import { MATCHED_PATH_HEADER } from "next/dist/lib/constants";
 
 /**
  * Raw provider IDs (single source of truth)
@@ -12,6 +13,9 @@ export const PROVIDER_IDS = {
   MAIN_5: "7KlujhUyJbeCTPG6Pty8exlxXuM2",
   MAIN_6: "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
   MAIN_7: "MstGdrDCHkZ1KKf0xtZctauIovf2",
+  MAIN_8: "OgioZJvg0DWWRnqZLj2AUMUljZN2",
+  MAIN_9: "uSZdJdat03froahSdGmPpFWDGhi2",
+  MAIN_10: "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
 } as const;
 
 /**

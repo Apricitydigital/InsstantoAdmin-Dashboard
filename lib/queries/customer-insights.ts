@@ -72,8 +72,15 @@ export async function fetchNewVsRepeatCustomers(
   /* ----------------------- 4️⃣ Fetch partner reviews ----------------------- */
   const partnerIds = [
     "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-    "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-    "VxxapfO7l8YM5f6xmFqpThc17eD3",
+        "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
+        "VxxapfO7l8YM5f6xmFqpThc17eD3",
+        "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
+        "7KlujhUyJbeCTPG6Pty8exlxXuM2",
+        "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
+        "MstGdrDCHkZ1KKf0xtZctauIovf2",
+        "OgioZJvg0DWWRnqZLj2AUMUljZN2",
+        "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
+        "uSZdJdat03froahSdGmPpFWDGhi2",
   ];
 
   const reviewsCol = collection(db, "reviews");

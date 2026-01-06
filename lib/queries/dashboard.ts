@@ -1,13 +1,15 @@
+"use client";
+
 import {
   collection,
+  getDocs,
   query,
   where,
-  getDocs,
   Timestamp,
-  doc,
+  doc as docRef,
+  DocumentReference,
 } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
-import { fetchCustomerStats } from "@/lib/queries/customers";
 
 export type BookingStats = {
   totalBookings: number;
@@ -51,8 +53,7 @@ function proratedExpense(
   to: Date,
   year: number
 ) {
-  const daysInMonth = (y: number, m: number) =>
-    new Date(y, m + 1, 0).getDate();
+  const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
 
   let total = 0;
 
@@ -70,9 +71,7 @@ function proratedExpense(
 
     if (overlapStart <= overlapEnd) {
       const overlapDays =
-        (overlapEnd.getTime() - overlapStart.getTime()) /
-          (1000 * 60 * 60 * 24) +
-        1;
+        (overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24) + 1;
 
       total += overlapDays * dailyExpense;
     }
@@ -82,29 +81,45 @@ function proratedExpense(
 }
 
 /* ------------------------------
+   CAC DENOMINATOR (WORKING)
+   Customers with exactly 1 completed booking IN THE RANGE
+   (scoped to the same provider filter + date filter)
+------------------------------ */
+function countCustomersWithExactlyOneCompletedBookingInSnap(
+  completedDocs: Array<{ customer_id?: DocumentReference | null }>
+) {
+  const counts: Record<string, number> = {};
+
+  for (const d of completedDocs) {
+    const ref = d.customer_id as DocumentReference | undefined;
+    const id = ref?.id;
+    if (!id) continue;
+    counts[id] = (counts[id] || 0) + 1;
+  }
+
+  let customersWithOneBooking = 0;
+  for (const c of Object.values(counts)) {
+    if (c === 1) customersWithOneBooking++;
+  }
+
+  return customersWithOneBooking;
+}
+
+/* ------------------------------
    MAIN FUNCTION
 ------------------------------ */
-export async function fetchBookingStats(
-  fromDate?: string,
-  toDate?: string
-): Promise<BookingStats> {
+export async function fetchBookingStats(fromDate?: string, toDate?: string): Promise<BookingStats> {
   const db = getFirestoreDb();
   const now = new Date();
-  const year = now.getFullYear();
 
   /* ------------------------------
      DATE RANGE (with fallback)
   ------------------------------ */
-  const defaultFrom = new Date(year, now.getMonth(), 1);
-  const defaultTo = new Date(year, now.getMonth() + 1, 0);
+  const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+  const defaultTo = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-  const from = fromDate
-    ? new Date(fromDate + "T00:00:00")
-    : defaultFrom;
-
-  const to = toDate
-    ? new Date(toDate + "T23:59:59")
-    : defaultTo;
+  const from = fromDate ? new Date(fromDate + "T00:00:00") : defaultFrom;
+  const to = toDate ? new Date(toDate + "T23:59:59") : defaultTo;
 
   const fromTS = Timestamp.fromDate(from);
   const toTS = Timestamp.fromDate(to);
@@ -113,17 +128,19 @@ export async function fetchBookingStats(
      PROVIDER FILTERS
   ------------------------------ */
   const providerIds = [
-    "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-    "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-    "VxxapfO7l8YM5f6xmFqpThc17eD3",
-    "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
-    "7KlujhUyJbeCTPG6Pty8exlxXuM2",
-    "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
-    "MstGdrDCHkZ1KKf0xtZctauIovf2",
+  "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
+        "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
+        "VxxapfO7l8YM5f6xmFqpThc17eD3",
+        "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
+        "7KlujhUyJbeCTPG6Pty8exlxXuM2",
+        "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
+        "MstGdrDCHkZ1KKf0xtZctauIovf2",
+        "OgioZJvg0DWWRnqZLj2AUMUljZN2",
+        "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
+        "uSZdJdat03froahSdGmPpFWDGhi2",
   ];
-  const providerRefs = providerIds.map((id) =>
-    doc(db, "customer", id)
-  );
+
+  const providerRefs = providerIds.map((id) => docRef(db, "customer", id));
 
   const bookingsCol = collection(db, "bookings");
   const customersCol = collection(db, "customer");
@@ -168,15 +185,30 @@ export async function fetchBookingStats(
   const cancelledBookings = cancelledSnap.size;
 
   /* ------------------------------
-     REVENUE CALCULATION
+     REVENUE CALCULATION (completed only)
   ------------------------------ */
   let totalRevenue = 0;
   let walletUsed = 0;
   let discounts = 0;
   let totalOfferAmount = 0;
 
-  completedSnap.forEach((doc) => {
-    const d = doc.data();
+  const completedDocsData: Array<{
+    amount_paid?: number;
+    walletAmountUsed?: number;
+    discount_amount?: number;
+    customer_id?: DocumentReference | null;
+  }> = [];
+
+  completedSnap.forEach((snapDoc) => {
+    const d = snapDoc.data() as any;
+
+    completedDocsData.push({
+      amount_paid: d.amount_paid ?? 0,
+      walletAmountUsed: d.walletAmountUsed ?? 0,
+      discount_amount: d.discount_amount ?? 0,
+      customer_id: d.customer_id ?? null,
+    });
+
     totalRevenue += d.amount_paid || 0;
     walletUsed += d.walletAmountUsed || 0;
     discounts += d.discount_amount || 0;
@@ -185,10 +217,7 @@ export async function fetchBookingStats(
 
   const netRevenue = totalRevenue - walletUsed - discounts;
 
-  const perOrderValue =
-    completedBookings > 0
-      ? totalRevenue / completedBookings
-      : 0;
+  const perOrderValue = completedBookings > 0 ? totalRevenue / completedBookings : 0;
 
   /* ------------------------------
      NEW CUSTOMERS CREATED IN RANGE
@@ -205,14 +234,13 @@ export async function fetchBookingStats(
   const totalCustomers = customersSnap.size;
 
   /* ------------------------------
-     CAC — CUSTOMERS WITH FIRST BOOKING
+     ✅ CAC DENOMINATOR (FIXED)
+     Customers who completed exactly ONE booking in THIS date range
+     (matches provider filter + date range)
   ------------------------------ */
-  const safeFrom = fromDate ?? "";
-  const safeTo = toDate ?? "";
-
-  const {
-    customersWithOneBooking,
-  } = await fetchCustomerStats(safeFrom, safeTo);
+  const customersWithOneBooking = countCustomersWithExactlyOneCompletedBookingInSnap(
+    completedDocsData
+  );
 
   /* ------------------------------
      MARKETING EXPENSE — GOOGLE SHEET
@@ -223,38 +251,32 @@ export async function fetchBookingStats(
   const sheetRes = await fetch(sheetUrl);
   const sheetData = await sheetRes.text();
 
-  const rows = sheetData.split("\n").map((r) => r.split(","));
-  const header = rows[0];
+  const rows = sheetData
+    .trim()
+    .split("\n")
+    .map((r) => r.split(","));
 
-  const monthIdx = header.findIndex((h) =>
-    h.toLowerCase().includes("month")
-  );
-  const totalIdx = header.findIndex((h) =>
-    h.toLowerCase().includes("total")
-  );
+  const header = rows[0] ?? [];
+  const monthIdx = header.findIndex((h) => h.toLowerCase().includes("month"));
+  const totalIdx = header.findIndex((h) => h.toLowerCase().includes("total"));
 
-  const monthlyExpenses = rows
-    .slice(1)
-    .map((r) => ({
-      month: r[monthIdx],
-      total: parseFloat(r[totalIdx]) || 0,
-    }))
-    .filter((m) => m.total > 0);
+  const monthlyExpenses =
+    monthIdx >= 0 && totalIdx >= 0
+      ? rows
+          .slice(1)
+          .map((r) => ({
+            month: r[monthIdx],
+            total: parseFloat(r[totalIdx]) || 0,
+          }))
+          .filter((m) => m.month && m.total > 0)
+      : [];
 
   /* ------------------------------
      CAC — PRORATED MARKETING EXPENSE
   ------------------------------ */
-  const cacExpense = proratedExpense(
-    monthlyExpenses,
-    from,
-    to,
-    year
-  );
+  const cacExpense = proratedExpense(monthlyExpenses, from, to, from.getFullYear());
 
-  const cac =
-    customersWithOneBooking > 0
-      ? cacExpense / customersWithOneBooking
-      : 0;
+  const cac = customersWithOneBooking > 0 ? cacExpense / customersWithOneBooking : 0;
 
   /* ------------------------------
      CAC CHANGE (PREVIOUS RANGE)
@@ -263,37 +285,45 @@ export async function fetchBookingStats(
   const prevFrom = new Date(from.getTime() - diff);
   const prevTo = new Date(to.getTime() - diff);
 
+  const prevFromTS = Timestamp.fromDate(prevFrom);
+  const prevToTS = Timestamp.fromDate(prevTo);
+
+  // Previous window: completed bookings (same provider filter + status + date range)
+  const prevCompletedSnap = await getDocs(
+    query(
+      bookingsCol,
+      where("provider_id", "in", providerRefs),
+      where("status", "==", "Service_Completed"),
+      where("date", ">=", prevFromTS),
+      where("date", "<=", prevToTS)
+    )
+  );
+
+  const prevCompletedDocs: Array<{ customer_id?: DocumentReference | null }> = [];
+  prevCompletedSnap.forEach((snapDoc) => {
+    const d = snapDoc.data() as any;
+    prevCompletedDocs.push({ customer_id: d.customer_id ?? null });
+  });
+
+  const prevCustomersWithOneBooking =
+    countCustomersWithExactlyOneCompletedBookingInSnap(prevCompletedDocs);
+
   const prevCACExpense = proratedExpense(
     monthlyExpenses,
     prevFrom,
     prevTo,
-    year
+    prevFrom.getFullYear()
   );
 
-  const prevDateFromStr = prevFrom.toISOString().slice(0, 10);
-  const prevDateToStr = prevTo.toISOString().slice(0, 10);
-
-  const {
-    customersWithOneBooking: prevNewCustomers,
-  } = await fetchCustomerStats(prevDateFromStr, prevDateToStr);
-
   const prevCAC =
-    prevNewCustomers > 0
-      ? prevCACExpense / prevNewCustomers
-      : 0;
+    prevCustomersWithOneBooking > 0 ? prevCACExpense / prevCustomersWithOneBooking : 0;
 
   const cacChange = percentChange(cac, prevCAC);
 
   /* ------------------------------
      NET PNL (DAILY PRORATED)
   ------------------------------ */
-  const totalExpensePNL = proratedExpense(
-    monthlyExpenses,
-    from,
-    to,
-    year
-  );
-
+  const totalExpensePNL = proratedExpense(monthlyExpenses, from, to, from.getFullYear());
   const netPnL = netRevenue - totalExpensePNL;
 
   /* ------------------------------
@@ -318,9 +348,7 @@ export async function fetchBookingStats(
     averageRating: 5,
     totalRatingsCount: 0,
     completionRate:
-      totalBookings > 0
-        ? Number(((completedBookings / totalBookings) * 100).toFixed(1))
-        : 0,
+      totalBookings > 0 ? Number(((completedBookings / totalBookings) * 100).toFixed(1)) : 0,
     totalOfferAmount,
     cac: Number(cac.toFixed(2)),
     cacChange: Number(cacChange.toFixed(1)),

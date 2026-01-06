@@ -36,7 +36,6 @@ import {
   Building2,
   DollarSign,
   Activity,
-  Award,
   CheckCircle,
   XCircle,
   Clock,
@@ -58,7 +57,7 @@ import { PartnerLoansSection } from "./sections/partner-loans"
 import { PartnerReviewsSection } from "./sections/partner-review"
 import { PartnerFuelSection } from "./sections/partner-fuel"
 import { PartnerAvailabilitySection } from "./sections/partner-availability"
-import PartnerAttendance from "./sections/partner-attendance";
+import PartnerAttendance from "./sections/partner-attendance"
 
 import { UserCheck } from "lucide-react" // Add to imports
 
@@ -96,8 +95,17 @@ type WalletDoc = {
   filteredEarnings?: number // ✅ Add filtered earnings
 }
 
+type PartnerSubscriptionDoc = {
+  id: string
+  partnerId?: any // Doc reference (customer)
+  subscriptionStatus?: string
+  subscribedDate?: Timestamp
+  expiryDate?: Timestamp
+  remaining_days?: number
+}
+
 function formatDateInput(d: Date) {
-  return d.toLocaleDateString("en-CA"); // ✅ Formats as YYYY-MM-DD
+  return d.toLocaleDateString("en-CA") // ✅ Formats as YYYY-MM-DD
 }
 
 export default function PartnerDetailsPage() {
@@ -119,6 +127,11 @@ export default function PartnerDetailsPage() {
   const [activeTab, setActiveTab] = useState("earnings")
   const [workingDays, setWorkingDays] = useState(0)
   const [nonWorkingDays, setNonWorkingDays] = useState(0)
+
+  // ✅ Subscription states
+  const [subscriptionInfo, setSubscriptionInfo] =
+    useState<PartnerSubscriptionDoc | null>(null)
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false)
 
   // ✅ Reset button
   const clearFilter = () => {
@@ -154,6 +167,59 @@ export default function PartnerDetailsPage() {
 
     fetchPartner()
   }, [partnerId, db])
+
+  // ✅ Fetch partner subscription info (expiryDate + remaining_days)
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      if (!partner?.id) return
+      setSubscriptionLoading(true)
+      try {
+        const partnerRef = doc(db, "customer", partner.id)
+
+        const subQuery = query(
+          collection(db, "partnerSubscription"),
+          where("partnerId", "==", partnerRef)
+        )
+
+        const snap = await getDocs(subQuery)
+
+        if (snap.empty) {
+          setSubscriptionInfo(null)
+          return
+        }
+
+        // If multiple docs exist, pick the one with the latest expiryDate
+        let best: PartnerSubscriptionDoc | null = null
+        snap.forEach((d) => {
+          const data = d.data() as any
+          const candidate: PartnerSubscriptionDoc = { id: d.id, ...data }
+
+          if (!best) {
+            best = candidate
+            return
+          }
+
+          const bestExpiry = best.expiryDate?.toDate
+            ? best.expiryDate.toDate().getTime()
+            : -1
+          const candExpiry = candidate.expiryDate?.toDate
+            ? candidate.expiryDate.toDate().getTime()
+            : -1
+
+          if (candExpiry > bestExpiry) best = candidate
+        })
+
+        setSubscriptionInfo(best)
+      } catch (err) {
+        console.error("Failed to fetch partner subscription:", err)
+        setSubscriptionInfo(null)
+      } finally {
+        setSubscriptionLoading(false)
+      }
+    }
+
+    fetchSubscription()
+  }, [partner?.id, db])
 
   // ✅ Fetch bookings stats (working days current month by default)
   useEffect(() => {
@@ -227,7 +293,6 @@ export default function PartnerDetailsPage() {
     fetchBookingsStats()
   }, [partner?.id, db, fromDate, toDate])
 
-
   // Fetch wallet information (all-time by default)
   useEffect(() => {
     const fetchWalletInfo = async () => {
@@ -236,7 +301,10 @@ export default function PartnerDetailsPage() {
         setWalletLoading(true)
         const partnerRef = doc(db, "customer", partner.id)
 
-        const walletQuery = query(collection(db, "Wallet_Overall"), where("service_partner_id", "==", partnerRef))
+        const walletQuery = query(
+          collection(db, "Wallet_Overall"),
+          where("service_partner_id", "==", partnerRef)
+        )
         const snapshot = await getDocs(walletQuery)
         if (!snapshot.empty) {
           const [walletDoc] = snapshot.docs
@@ -260,14 +328,20 @@ export default function PartnerDetailsPage() {
 
               transactionsSnap.forEach((docSnap) => {
                 const transaction = docSnap.data()
-                if (transaction.payment_in_wallet && transaction.payment_in_wallet > 0) {
+                if (
+                  transaction.payment_in_wallet &&
+                  transaction.payment_in_wallet > 0
+                ) {
                   filteredEarnings += transaction.payment_in_wallet
                 }
               })
             } else {
               // ✅ All-time earnings
               const allTx = await getDocs(
-                query(collection(db, "Wallet_In_record"), where("partnerId", "==", partnerRef))
+                query(
+                  collection(db, "Wallet_In_record"),
+                  where("partnerId", "==", partnerRef)
+                )
               )
               allTx.forEach((docSnap) => {
                 const t = docSnap.data()
@@ -315,7 +389,10 @@ export default function PartnerDetailsPage() {
             where("timestamp", "<=", toTimestamp)
           )
         } else {
-          reviewsQueryRef = query(collection(db, "reviews"), where("partnerId", "==", partnerRef))
+          reviewsQueryRef = query(
+            collection(db, "reviews"),
+            where("partnerId", "==", partnerRef)
+          )
         }
 
         const snapshot = await getDocs(reviewsQueryRef)
@@ -323,7 +400,7 @@ export default function PartnerDetailsPage() {
         if (!snapshot.empty) {
           let total = 0
           let count = 0
-          snapshot.forEach(doc => {
+          snapshot.forEach((doc) => {
             const data = doc.data() as any
             if (typeof data.partnerRating === "number" && data.partnerRating > 0) {
               total += data.partnerRating
@@ -331,9 +408,13 @@ export default function PartnerDetailsPage() {
             }
           })
           const avg = count > 0 ? total / count : 0
-          setPartner(prev => prev ? { ...prev, ratings_average: avg, total_reviews: count } : prev)
+          setPartner((prev) =>
+            prev ? { ...prev, ratings_average: avg, total_reviews: count } : prev
+          )
         } else {
-          setPartner(prev => prev ? { ...prev, ratings_average: 0, total_reviews: 0 } : prev)
+          setPartner((prev) =>
+            prev ? { ...prev, ratings_average: 0, total_reviews: 0 } : prev
+          )
         }
       } catch (err) {
         console.error("Failed to fetch reviews:", err)
@@ -363,20 +444,45 @@ export default function PartnerDetailsPage() {
 
   const getInitials = (name?: string) => {
     if (!name) return "P"
-    return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
   }
 
   const getStatusBadge = (status?: string) => {
     switch (status?.toLowerCase()) {
       case "active":
       case "onboarded":
-        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Active</Badge>
+        return (
+          <Badge className="bg-green-100 text-green-800">
+            <CheckCircle className="w-3 h-3 mr-1" />
+            Active
+          </Badge>
+        )
       case "pending":
-        return <Badge variant="outline"><Clock className="w-3 h-3 mr-1" />Pending</Badge>
+        return (
+          <Badge variant="outline">
+            <Clock className="w-3 h-3 mr-1" />
+            Pending
+          </Badge>
+        )
       case "suspended":
-        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Suspended</Badge>
+        return (
+          <Badge variant="destructive">
+            <XCircle className="w-3 h-3 mr-1" />
+            Suspended
+          </Badge>
+        )
       case "rejected":
-        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>
+        return (
+          <Badge variant="destructive">
+            <XCircle className="w-3 h-3 mr-1" />
+            Rejected
+          </Badge>
+        )
       default:
         return <Badge variant="secondary">{status || "Unknown"}</Badge>
     }
@@ -386,11 +492,26 @@ export default function PartnerDetailsPage() {
     switch (status?.toLowerCase()) {
       case "verified":
       case "approved":
-        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Verified</Badge>
+        return (
+          <Badge className="bg-green-100 text-green-800">
+            <CheckCircle className="w-3 h-3 mr-1" />
+            Verified
+          </Badge>
+        )
       case "pending":
-        return <Badge variant="outline"><Clock className="w-3 h-3 mr-1" />Pending</Badge>
+        return (
+          <Badge variant="outline">
+            <Clock className="w-3 h-3 mr-1" />
+            Pending
+          </Badge>
+        )
       case "rejected":
-        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>
+        return (
+          <Badge variant="destructive">
+            <XCircle className="w-3 h-3 mr-1" />
+            Rejected
+          </Badge>
+        )
       default:
         return <Badge variant="secondary">{status || "Verified"}</Badge>
     }
@@ -398,7 +519,8 @@ export default function PartnerDetailsPage() {
 
   const getPartnerType = () => {
     if (!partner?.userType) return "Unknown"
-    if (partner.userType.provider && partner.userType.AgencyPartner) return "Provider & Agency"
+    if (partner.userType.provider && partner.userType.AgencyPartner)
+      return "Provider & Agency"
     if (partner.userType.provider) return "Service Provider"
     if (partner.userType.AgencyPartner) return "Agency Partner"
     return "Unknown"
@@ -435,7 +557,9 @@ export default function PartnerDetailsPage() {
                 <CardContent className="p-8 text-center">
                   <XCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
                   <h3 className="text-lg font-semibold mb-2">Partner Not Found</h3>
-                  <p className="text-muted-foreground mb-4">{error || "The requested partner could not be found."}</p>
+                  <p className="text-muted-foreground mb-4">
+                    {error || "The requested partner could not be found."}
+                  </p>
                   <Button onClick={() => router.back()}>
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Go Back
@@ -456,7 +580,6 @@ export default function PartnerDetailsPage() {
         <div className="flex flex-col sm:gap-4 sm:py-4">
           <AdminHeader title="Partner Management" />
           <main className="flex-1 space-y-6 p-4 md:p-6">
-
             {/* Back Button */}
             <div className="flex items-center gap-4">
               <Button variant="outline" onClick={() => router.back()}>
@@ -501,14 +624,23 @@ export default function PartnerDetailsPage() {
                 <div className="flex flex-col lg:flex-row gap-6">
                   <div className="flex flex-col items-center lg:items-start gap-4">
                     <Avatar className="w-24 h-24">
-                      <AvatarImage src={partner.photo_url} alt={partner.display_name || partner.customer_name} />
+                      <AvatarImage
+                        src={partner.photo_url}
+                        alt={partner.display_name || partner.customer_name}
+                      />
                       <AvatarFallback className="text-lg">
                         {getInitials(partner.display_name || partner.customer_name)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="text-center lg:text-left">
-                      <h2 className="text-2xl font-bold">{partner.display_name || partner.customer_name || "Unknown Partner"}</h2>
-                      <p className="text-muted-foreground">Partner ID: {partner.uid || partner.id}</p>
+                      <h2 className="text-2xl font-bold">
+                        {partner.display_name ||
+                          partner.customer_name ||
+                          "Unknown Partner"}
+                      </h2>
+                      <p className="text-muted-foreground">
+                        Partner ID: {partner.uid || partner.id}
+                      </p>
                       <div className="flex flex-col gap-2 mt-2">
                         <Badge variant="outline" className="w-fit">
                           <Building2 className="w-3 h-3 mr-1" />
@@ -522,13 +654,17 @@ export default function PartnerDetailsPage() {
 
                   <div className="flex-1 grid gap-6 lg:grid-cols-2">
                     <div className="space-y-4">
-                      <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Contact Information</h4>
+                      <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">
+                        Contact Information
+                      </h4>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
                           <Mail className="w-4 h-4 text-muted-foreground" />
                           <div>
                             <p className="text-sm font-medium">Email</p>
-                            <p className="text-sm text-muted-foreground">{partner.email || "Not provided"}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {partner.email || "Not provided"}
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -536,7 +672,10 @@ export default function PartnerDetailsPage() {
                           <div>
                             <p className="text-sm font-medium">Phone</p>
                             <p className="text-sm text-muted-foreground">
-                              {partner.phone_number || (partner.contact_no ? String(partner.contact_no) : "Not provided")}
+                              {partner.phone_number ||
+                                (partner.contact_no
+                                  ? String(partner.contact_no)
+                                  : "Not provided")}
                             </p>
                           </div>
                         </div>
@@ -544,21 +683,27 @@ export default function PartnerDetailsPage() {
                           <MapPin className="w-4 h-4 text-muted-foreground" />
                           <div>
                             <p className="text-sm font-medium">City</p>
-                            <p className="text-sm text-muted-foreground">{partner.city || "Indore"}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {partner.city || "Indore"}
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <Calendar className="w-4 h-4 text-muted-foreground" />
                           <div>
                             <p className="text-sm font-medium">Joined</p>
-                            <p className="text-sm text-muted-foreground">{formatDate(partner.created_time)}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatDate(partner.created_time)}
+                            </p>
                           </div>
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-4">
-                      <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Status & Performance</h4>
+                      <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">
+                        Status & Performance
+                      </h4>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
                           <Activity className="w-4 h-4 text-muted-foreground" />
@@ -567,6 +712,41 @@ export default function PartnerDetailsPage() {
                             {getStatusBadge(partner.partner_status)}
                           </div>
                         </div>
+
+                        {/* ✅ Subscription expiry + remaining days */}
+                        <div className="flex items-center gap-3">
+                          <CalendarDays className="w-4 h-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">Subscription</p>
+                            {subscriptionLoading ? (
+                              <p className="text-sm text-muted-foreground">
+                                <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                                Loading...
+                              </p>
+                            ) : subscriptionInfo?.expiryDate ? (
+                              <p className="text-sm text-muted-foreground">
+                                Expiry:{" "}
+                                <span className="font-medium text-foreground">
+                                  {formatDate(subscriptionInfo.expiryDate)}
+                                </span>
+                                {typeof subscriptionInfo.remaining_days === "number" ? (
+                                  <>
+                                    {" "}
+                                    • Remaining:{" "}
+                                    <span className="font-medium text-foreground">
+                                      {subscriptionInfo.remaining_days} days
+                                    </span>
+                                  </>
+                                ) : null}
+                              </p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                No subscription found
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
                         <div className="flex items-center gap-3">
                           <FileText className="w-4 h-4 text-muted-foreground" />
                           <div>
@@ -579,9 +759,13 @@ export default function PartnerDetailsPage() {
                           <div>
                             <p className="text-sm font-medium">Rating</p>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{partner.ratings_average?.toFixed(1) || "0.0"}</span>
+                              <span className="text-sm font-medium">
+                                {partner.ratings_average?.toFixed(1) || "0.0"}
+                              </span>
                               <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                              <span className="text-xs text-muted-foreground">({partner.total_reviews || 0} reviews)</span>
+                              <span className="text-xs text-muted-foreground">
+                                ({partner.total_reviews || 0} reviews)
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -590,7 +774,11 @@ export default function PartnerDetailsPage() {
                           <div>
                             <p className="text-sm font-medium">Pending Payout</p>
                             <p className="text-sm font-bold">
-                              {walletLoading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : formatCurrency(walletInfo?.total_balance || 0)}
+                              {walletLoading ? (
+                                <Loader2 className="w-4 h-4 animate-spin inline" />
+                              ) : (
+                                formatCurrency(walletInfo?.total_balance || 0)
+                              )}
                             </p>
                           </div>
                         </div>
@@ -606,7 +794,9 @@ export default function PartnerDetailsPage() {
                       <h4 className="font-medium mb-3">Services Offered</h4>
                       <div className="flex flex-wrap gap-2">
                         {partner.services.map((service, index) => (
-                          <Badge key={index} variant="outline">{service}</Badge>
+                          <Badge key={index} variant="outline">
+                            {service}
+                          </Badge>
                         ))}
                       </div>
                     </div>
@@ -644,7 +834,9 @@ export default function PartnerDetailsPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium">Completed Bookings</p>
-                      <p className="text-2xl font-bold">{partner?.completedBookings || 0}</p>
+                      <p className="text-2xl font-bold">
+                        {partner?.completedBookings || 0}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         In selected date range
                       </p>
@@ -678,7 +870,9 @@ export default function PartnerDetailsPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium">Rating</p>
-                      <p className="text-2xl font-bold">{partner.ratings_average?.toFixed(1) || "0.0"}</p>
+                      <p className="text-2xl font-bold">
+                        {partner.ratings_average?.toFixed(1) || "0.0"}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         Based on {partner.total_reviews || 0} reviews in range
                       </p>
@@ -694,11 +888,18 @@ export default function PartnerDetailsPage() {
                 <CardTitle>Partner Management</CardTitle>
               </CardHeader>
               <CardContent>
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                  <TabsList className={`grid w-full ${partner?.userType?.AgencyPartner
-                      ? "grid-cols-9" // Show 9 tabs when agency partner
-                      : "grid-cols-8" // Show 8 tabs otherwise
-                    }`}>
+                <Tabs
+                  value={activeTab}
+                  onValueChange={setActiveTab}
+                  className="w-full"
+                >
+                  <TabsList
+                    className={`grid w-full ${
+                      partner?.userType?.AgencyPartner
+                        ? "grid-cols-9" // Show 9 tabs when agency partner
+                        : "grid-cols-8" // Show 8 tabs otherwise
+                    }`}
+                  >
                     <TabsTrigger value="earnings" className="flex items-center gap-2">
                       <BarChart3 className="w-4 h-4" />
                       <span className="hidden sm:inline">Earnings</span>
@@ -715,30 +916,33 @@ export default function PartnerDetailsPage() {
                       <CreditCard className="w-4 h-4" />
                       <span className="hidden sm:inline">Credits</span>
                     </TabsTrigger>
-                 
-    {/* ✅ Attendance tab → only for Agency Partners */}
-    {partner?.userType?.AgencyPartner && (
-      <TabsTrigger value="attendance" className="flex items-center gap-2">
-        <UserCheck className="w-4 h-4" />
-        <span className="hidden sm:inline">Attendance</span>
-      </TabsTrigger>
-    )}
 
-    {/* ✅ Fuel tab → only for Agency Partners */}
-    {partner?.userType?.AgencyPartner && (
-      <TabsTrigger value="fuel" className="flex items-center gap-2">
-        <Fuel className="w-4 h-4" />
-        <span className="hidden sm:inline">Fuel Expense</span>
-      </TabsTrigger>
-    )}
+                    {/* ✅ Attendance tab → only for Agency Partners */}
+                    {partner?.userType?.AgencyPartner && (
+                      <TabsTrigger value="attendance" className="flex items-center gap-2">
+                        <UserCheck className="w-4 h-4" />
+                        <span className="hidden sm:inline">Attendance</span>
+                      </TabsTrigger>
+                    )}
 
-    {/* ✅ Availability tab → only for Service Providers */}
-    {partner?.userType?.provider && (
-      <TabsTrigger value="availability" className="flex items-center gap-2">
-        <CalendarDays className="w-4 h-4" />
-        <span className="hidden sm:inline">Availability</span>
-      </TabsTrigger>
-    )}
+                    {/* ✅ Fuel tab → only for Agency Partners */}
+                    {partner?.userType?.AgencyPartner && (
+                      <TabsTrigger value="fuel" className="flex items-center gap-2">
+                        <Fuel className="w-4 h-4" />
+                        <span className="hidden sm:inline">Fuel Expense</span>
+                      </TabsTrigger>
+                    )}
+
+                    {/* ✅ Availability tab → only for Service Providers */}
+                    {partner?.userType?.provider && (
+                      <TabsTrigger
+                        value="availability"
+                        className="flex items-center gap-2"
+                      >
+                        <CalendarDays className="w-4 h-4" />
+                        <span className="hidden sm:inline">Availability</span>
+                      </TabsTrigger>
+                    )}
 
                     <TabsTrigger value="chemicals" className="flex items-center gap-2">
                       <ShoppingCart className="w-4 h-4" />
@@ -755,27 +959,40 @@ export default function PartnerDetailsPage() {
                   </TabsList>
 
                   <TabsContent value="earnings" className="mt-6">
-                    <PartnerEarningsSection partnerId={partnerId} fromDate={fromDate} toDate={toDate} />
+                    <PartnerEarningsSection
+                      partnerId={partnerId}
+                      fromDate={fromDate}
+                      toDate={toDate}
+                    />
                   </TabsContent>
                   <TabsContent value="bookings" className="mt-6">
                     <PartnerBookingsSection partnerId={partnerId} />
                   </TabsContent>
                   <TabsContent value="loans" className="mt-6">
-                    <PartnerLoansSection partnerId={partnerId} fromDate={fromDate} toDate={toDate} />
+                    <PartnerLoansSection
+                      partnerId={partnerId}
+                      fromDate={fromDate}
+                      toDate={toDate}
+                    />
                   </TabsContent>
                   <TabsContent value="credits" className="mt-6">
                     <PartnerCreditsSection partnerId={partnerId} />
                   </TabsContent>
                   <TabsContent value="attendance" className="mt-6">
-                    <PartnerAttendance partnerName="Vishal Bodre" startDate={fromDate} endDate={toDate} />
+                    <PartnerAttendance
+                      partnerName="Vishal Bodre"
+                      startDate={fromDate}
+                      endDate={toDate}
+                    />
                   </TabsContent>
 
-                
-                    <TabsContent value="fuel" className="mt-6">
-                      <PartnerFuelSection partnerId={partnerId} fromDate={fromDate} toDate={toDate} />
-                    </TabsContent>
-                
-
+                  <TabsContent value="fuel" className="mt-6">
+                    <PartnerFuelSection
+                      partnerId={partnerId}
+                      fromDate={fromDate}
+                      toDate={toDate}
+                    />
+                  </TabsContent>
 
                   <TabsContent value="availability" className="mt-6">
                     <PartnerAvailabilitySection partnerId={partnerId} />
