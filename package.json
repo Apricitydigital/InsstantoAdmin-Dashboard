@@ -53,7 +53,6 @@
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
     "next-themes": "^0.4.6",
-    "pnpm-lock.yaml": "^1.0.0",
     "razorpay": "^2.9.6",
     "react": "^18.2.0",
     "react-day-picker": "latest",
@@ -67,7 +66,6 @@
     "ts-node": "^10.9.2",
     "vaul": "^0.9.9",
     "xlsx": "^0.18.5",
-    "yarn.lock": "0.0.1-security",
     "zod": "3.25.67"
   },
   "devDependencies": {
