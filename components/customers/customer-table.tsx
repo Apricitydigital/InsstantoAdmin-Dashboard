@@ -39,6 +39,7 @@ type CustomerDoc = {
   location?: LatLng
   Subscription?: string
   bookingCount?: number
+  referralBy?: string
 }
 
 const PAGE_SIZE = 20
@@ -194,6 +195,7 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
           c.phone_number,
           c.contact_no,
           c.uid,
+          c.referralBy,
         ]
           .map(normalize)
           .join(" ")
@@ -346,7 +348,7 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Bookings</TableHead>
-                    <TableHead>Location</TableHead>
+                    <TableHead>Referred By</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -368,7 +370,7 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
                         <TableCell>{fmtPhone(c)}</TableCell>
                         <TableCell>{c.bookingCount ?? 0}</TableCell>
                         <TableCell className="text-xs font-mono">
-                          {fmtLatLng(c.location ?? null)}
+                          {c.referralBy || "—"}
                         </TableCell>
                         <TableCell className="text-xs">
                           {fmtDate(c.created_time)}

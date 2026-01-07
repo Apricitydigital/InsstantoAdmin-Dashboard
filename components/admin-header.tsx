@@ -1,35 +1,78 @@
 "use client"
 
-import { useState } from "react"
-import { Search, Bell, User, Calendar, Filter, LogOut } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Bell, User, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
-import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useAuth } from "@/lib/auth"
-import type { DateRange } from "react-day-picker"
-import { format } from "date-fns"
+import { collection, onSnapshot, query, where } from "firebase/firestore"
+import { getFirestoreDb } from "@/lib/firebase"
 
 interface AdminHeaderProps {
   title?: string
 }
 
-export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
-  const [date, setDate] = useState<DateRange | undefined>({
-    from: new Date(2024, 0, 20),
-    to: new Date(2024, 1, 9),
-  })
+type NotificationItem = {
+  id: string
+  type: "booking" | "complaint"
+  title: string
+  subtitle: string
+}
 
+export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
   const { user, logout } = useAuth()
+  const db = getFirestoreDb()
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+
+  // 🔔 Real-time notifications (read-only)
+  useEffect(() => {
+    let bookings: NotificationItem[] = []
+    let complaints: NotificationItem[] = []
+
+    const bookingQuery = query(
+      collection(db, "bookings"),
+      where("bookingStatus", "==", "Pending")
+    )
+
+    const complaintQuery = query(
+      collection(db, "customer_complain"),
+      where("complaint_status", "==", "pending")
+    )
+
+    const unsubBookings = onSnapshot(bookingQuery, (snapshot) => {
+      bookings = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        type: "booking",
+        title: "New Booking",
+        subtitle: `Booking ID: ${doc.id.slice(0, 8)}`,
+      }))
+      setNotifications([...bookings, ...complaints])
+    })
+
+    const unsubComplaints = onSnapshot(complaintQuery, (snapshot) => {
+      complaints = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        type: "complaint",
+        title: "New Complaint",
+        subtitle: `Complaint ID: ${doc.id.slice(0, 8)}`,
+      }))
+      setNotifications([...bookings, ...complaints])
+    })
+
+    return () => {
+      unsubBookings()
+      unsubComplaints()
+    }
+  }, [db])
 
   const handleLogout = () => {
     logout()
@@ -37,120 +80,89 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
   }
 
   return (
-      <header
-      className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 lg:h-[60px] lg:px-6"
-      >
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur px-4 lg:h-[60px] lg:px-6">
+      {/* Title */}
       <div className="flex-1">
-        <h1 className="text-lg font-semibold md:text-2xl text-balance">{title}</h1>
+        <h1 className="text-lg font-semibold md:text-2xl">{title}</h1>
       </div>
 
+      {/* Actions */}
       <div className="flex items-center gap-4">
-        {/* Global Search */}
-        {/* <div className="relative hidden md:block">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input type="search" placeholder="Search bookings, customers, partners..." className="w-[300px] pl-8" />
-        </div> */}
-
-        {/* Date Range Picker */}
-        {/* <Popover>
+        {/* 🔔 Notifications */}
+        <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2 bg-transparent">
-              <Calendar className="h-4 w-4" />
-              {date?.from ? (
-                date.to ? (
-                  <>
-                    {format(date.from, "LLL dd")} - {format(date.to, "LLL dd, y")}
-                  </>
-                ) : (
-                  format(date.from, "LLL dd, y")
-                )
-              ) : (
-                <span>Pick a date</span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="relative bg-transparent"
+              title="Notifications"
+            >
+              <Bell className="h-4 w-4" />
+
+              {notifications.length > 0 && (
+                <Badge className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full px-1 text-xs bg-red-500 text-white">
+                  {notifications.length}
+                </Badge>
               )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <CalendarComponent
-              initialFocus
-              mode="range"
-              defaultMonth={date?.from}
-              selected={date}
-              onSelect={setDate}
-              numberOfMonths={2}
-            />
+
+          <PopoverContent align="end" className="w-80 p-0">
+            <div className="border-b px-4 py-2 font-semibold">
+              Notifications
+            </div>
+
+            {notifications.length === 0 ? (
+              <div className="px-4 py-6 text-sm text-muted-foreground text-center">
+                No new notifications
+              </div>
+            ) : (
+              <div className="max-h-72 overflow-y-auto">
+                {notifications.map((item) => (
+                  <div
+                    key={item.id}
+                    className="px-4 py-3 border-b last:border-b-0 hover:bg-muted/50 transition"
+                  >
+                    <div className="text-sm font-medium">
+                      {item.title}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {item.subtitle}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </PopoverContent>
-        </Popover> */}
+        </Popover>
 
-        {/* Quick Filters */}
-        {/* <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon">
-              <Filter className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Quick Filters</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>All Cities</DropdownMenuItem>
-            <DropdownMenuItem>Mumbai</DropdownMenuItem>
-            <DropdownMenuItem>Delhi</DropdownMenuItem>
-            <DropdownMenuItem>Bangalore</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>All Categories</DropdownMenuItem>
-            <DropdownMenuItem>Home Cleaning</DropdownMenuItem>
-            <DropdownMenuItem>Pest Control</DropdownMenuItem>
-            <DropdownMenuItem>Appliance Repair</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu> */}
-
-        {/* Notifications */}
-        {/* <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="relative bg-transparent">
-              <Bell className="h-4 w-4" />
-              <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs bg-secondary">3</Badge>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="flex flex-col items-start gap-1 p-3">
-              <div className="font-medium">New booking received</div>
-              <div className="text-sm text-muted-foreground">Home cleaning service in Mumbai - ₹1,200</div>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1 p-3">
-              <div className="font-medium">Partner verification pending</div>
-              <div className="text-sm text-muted-foreground">2 partners awaiting document approval</div>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1 p-3">
-              <div className="font-medium">Low stock alert</div>
-              <div className="text-sm text-muted-foreground">Cleaning supplies running low in Delhi warehouse</div>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu> */}
-
-        {/* User Menu */}
+        {/* 👤 User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon">
               <User className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{user?.name}</p>
-                <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                <p className="text-sm font-medium leading-none">
+                  {user?.name}
+                </p>
+                <p className="text-xs leading-none text-muted-foreground">
+                  {user?.email}
+                </p>
                 <Badge variant="secondary" className="w-fit text-xs capitalize">
                   {user?.role}
                 </Badge>
               </div>
             </DropdownMenuLabel>
-            {/* <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Settings</DropdownMenuItem>
-            <DropdownMenuSeparator /> */}
-            <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="text-destructive"
+            >
               <LogOut className="mr-2 h-4 w-4" />
               Logout
             </DropdownMenuItem>
