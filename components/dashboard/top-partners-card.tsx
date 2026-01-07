@@ -15,7 +15,7 @@ function formatINR(n: number) {
   }).format(n || 0);
 }
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 4;
 
 export function TopPartnersCard() {
   const [partners, setPartners] = useState<TopPartner[]>([]);

@@ -9,10 +9,11 @@ import { ChartPlaceholder } from "@/components/dashboard/chart-placeholder";
 import { GraphPlaceholder } from "@/components/dashboard/graph-placeholder";
 import { PerformanceMetrics } from "@/components/dashboard/performance-metrics";
 import { Calendar, Users, DollarSign, TrendingUp, UserPlus, Star, Activity, BarChart3 } from "lucide-react";
-import { CACGraph } from "@/components/dashboard/cac-graph";
+import CACGraph from "@/components/dashboard/cac-graph";
+
 import { ExpensePieChart } from "@/components/dashboard/expense-pie-chart";
 import { TopPartnersCard } from "@/components/dashboard/top-partners-card";
-import {DailyOverviewCard} from "@/components/dashboard/daily-overview"
+import { DailyOverviewCard } from "@/components/dashboard/daily-overview"
 import { PnLGraph } from "@/components/dashboard/PnLGraph";
 
 function formatDateInput(d: Date) {
@@ -79,12 +80,10 @@ export default function DashboardPage() {
           icon: Star,
           color: "text-chart-2",
           description: "Customer Acquisition Cost",
-          hoverContent: (
+          onClickContent: (
             <CACGraph
               title="Customer Acquisition Cost Trend"
               description="Month-over-month CAC variation"
-              icon={Star}
-              iconColor="text-chart-2"
             />
           ),
         },
@@ -180,7 +179,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <TopPartnersCard />
               {/* <TodayBookingsCard /> will come next */}
-              <DailyOverviewCard/>
+              <DailyOverviewCard />
             </div>
 
             {/* ---- Performance Metrics ---- */}

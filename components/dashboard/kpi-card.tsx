@@ -13,7 +13,7 @@ interface KpiCardProps {
   icon: LucideIcon;
   color: string;
   description: string;
-  hoverContent?: React.ReactNode; // 👈 optional hover graph
+  onClickContent?: React.ReactNode; // ✅ click-based content (CAC chart)
 }
 
 export function KpiCard({
@@ -24,9 +24,9 @@ export function KpiCard({
   icon: Icon,
   color,
   description,
-  hoverContent,
+  onClickContent,
 }: KpiCardProps) {
-  const [hovered, setHovered] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const colorMapping: Record<
     string,
@@ -67,63 +67,66 @@ export function KpiCard({
   const colorStyles = colorMapping[color] || colorMapping.default;
 
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+    <>
       {/* KPI CARD */}
-      <Card
-        className={cn(
-          "transition-transform hover:scale-[1.02] hover:shadow-md border-l-4 shadow-sm cursor-pointer",
-          colorStyles.border,
-          colorStyles.bg
-        )}
+      <div
+        className={cn(onClickContent && "cursor-pointer")}
+        onClick={() => onClickContent && setOpen(true)}
       >
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium">{title}</CardTitle>
-            <Icon className={cn("h-4 w-4 opacity-90", color)} />
-          </div>
-        </CardHeader>
+        <Card
+          className={cn(
+            "transition-transform hover:scale-[1.02] hover:shadow-md border-l-4 shadow-sm",
+            colorStyles.border,
+            colorStyles.bg
+          )}
+        >
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium">{title}</CardTitle>
+              <Icon className={cn("h-4 w-4 opacity-90", color)} />
+            </div>
+          </CardHeader>
 
-        <CardContent>
-          <div className={cn("text-2xl font-bold", colorStyles.text)}>
-            {value}
-          </div>
+          <CardContent>
+            <div className={cn("text-2xl font-bold", colorStyles.text)}>
+              {value}
+            </div>
 
-          <div className="flex items-center space-x-1 text-xs">
-            <span
-              className={trend === "up" ? "text-green-600" : "text-red-600"}
+            <div className="flex items-center space-x-1 text-xs">
+              <span
+                className={trend === "up" ? "text-green-600" : "text-red-600"}
+              >
+                {change}
+              </span>
+              <span className="text-muted-foreground">from last month</span>
+            </div>
+
+            <p className="text-xs text-muted-foreground mt-1">
+              {description}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ✅ CLICK MODAL */}
+      {open && onClickContent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="relative bg-white rounded-xl shadow-xl w-[90vw] max-w-3xl p-4">
+            {/* Close button */}
+            <button
+              className="absolute top-2 right-2 rounded-md px-2 py-1 text-sm text-gray-600 hover:bg-gray-100"
+              onClick={() => setOpen(false)}
             >
-              {change}
-            </span>
-            <span className="text-muted-foreground">from last month</span>
+              ✕
+            </button>
+
+            {/* Content */}
+            <div className="max-h-[70vh] overflow-auto">
+              {onClickContent}
+            </div>
           </div>
-
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
-        </CardContent>
-      </Card>
-
-      {/* 👇 Responsive Hover Graph Popup */}
-{hovered && hoverContent && (
-  <div
-    className={cn(
-      "fixed z-[9999] p-3 bg-white border shadow-2xl rounded-xl transition-all duration-200",
-      "w-[90vw] sm:w-[600px] md:w-[500px] lg:w-[600px]"
-    )}
-    style={{
-      top: "50%", // You can fine-tune this value depending on layout
-      left: "50%",
-      transform: "translate(-50%, -50%)",
-    }}
-  >
-    <div className="w-full h-auto max-h-[400px] overflow-hidden rounded-md">
-      {hoverContent}
-    </div>
-  </div>
-)}
-
-    </div>
+        </div>
+      )}
+    </>
   );
 }

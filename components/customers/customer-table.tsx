@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   collection,
-  DocumentData,
   getDocs,
   limit,
   onSnapshot,
@@ -22,7 +21,10 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2, ChevronLeft, ChevronRight, Search, Users, Phone, Eye } from "lucide-react"
 
-type LatLng = { latitude: number; longitude: number } | { lat: number; lng: number } | null
+type LatLng =
+  | { latitude: number; longitude: number }
+  | { lat: number; lng: number }
+  | null
 
 type CustomerDoc = {
   id: string
@@ -32,65 +34,49 @@ type CustomerDoc = {
   customer_name?: string
   phone_number?: string
   contact_no?: number
-  userType?: { customer?: boolean; provider?: boolean; admin?: boolean; AgencyPartner?: boolean } | any
+  userType?: any
   created_time?: Timestamp
-  edited_time?: Timestamp
-  cancellationPolicy?: boolean
   location?: LatLng
-  photo_url?: string
-  address?: any
-  bio?: string
-  referralBy?: string
   Subscription?: string
+  bookingCount?: number
 }
 
 const PAGE_SIZE = 20
 
 interface CustomerTableProps {
-  fromDate: string;
-  toDate: string;
+  fromDate: string
+  toDate: string
 }
 
 export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
   const db = getFirestoreDb()
   const router = useRouter()
 
-  // All data state
   const [allCustomers, setAllCustomers] = useState<CustomerDoc[]>([])
-
-  // UI states
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
-  const [membershipFilter, setMembershipFilter] = useState<"all" | "member" | "non-member">("all")
-
-  // Pagination for filtered results
+  const [bookingFilter, setBookingFilter] = useState<"all" | "0" | "1" | "2" | "2plus">("all")
   const [currentPage, setCurrentPage] = useState(1)
 
   const normalize = (v: unknown) => (v ?? "").toString().toLowerCase()
 
-  // ----- Load Customers Based on Date Range -----
+  // -----------------------------------------------------
+  // LOAD CUSTOMERS + BOOKING COUNTS
+  // -----------------------------------------------------
   useEffect(() => {
-    const fetchCustomers = async () => {
+    const fetchData = async () => {
       setLoading(true)
       setError("")
 
       try {
-        // Convert date strings to Firestore Timestamps
-        // Use local time instead of UTC to avoid timezone offset issues
-        const startDate = fromDate
-          ? new Date(`${fromDate}T00:00:00`)  // No 'Z'
-          : new Date(2025, 3, 1);
+        const startDate = fromDate ? new Date(`${fromDate}T00:00:00`) : new Date(2025, 3, 1)
+        const endDate = toDate ? new Date(`${toDate}T23:59:59`) : new Date()
 
-        const endDate = toDate
-          ? new Date(`${toDate}T23:59:59`)    // No 'Z'
-          : new Date();
+        const fromTimestamp = Timestamp.fromDate(startDate)
+        const toTimestamp = Timestamp.fromDate(endDate)
 
-
-        const fromTimestamp = Timestamp.fromDate(startDate);
-        const toTimestamp = Timestamp.fromDate(endDate);
-
-        // Fetch customers within the date range
+        // Load customers
         const customersQuery = query(
           collection(db, "customer"),
           where("userType.customer", "==", true),
@@ -99,29 +85,54 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
           orderBy("created_time", "desc")
         )
 
-        const snapshot = await getDocs(customersQuery)
-        const docs = snapshot.docs.map((d) => ({
+        const customerSnap = await getDocs(customersQuery)
+
+        const customerDocs = customerSnap.docs.map((d) => ({
           id: d.id,
           ...(d.data() as any)
         })) as CustomerDoc[]
 
-        setAllCustomers(docs)
+        // Load bookings for count
+        const bookingsQuery = query(
+          collection(db, "bookings"),
+          where("date", ">=", fromTimestamp),
+          where("date", "<=", toTimestamp)
+        )
 
+        const bookingSnap = await getDocs(bookingsQuery)
+
+        const bookingCountMap: Record<string, number> = {}
+
+        bookingSnap.forEach((b) => {
+          const ref = b.data().customer_id
+          const id = ref?.id
+          if (!id) return
+          bookingCountMap[id] = (bookingCountMap[id] || 0) + 1
+        })
+
+        // Attach booking count
+        const withCounts = customerDocs.map((c) => ({
+          ...c,
+          bookingCount: bookingCountMap[c.id] || 0
+        }))
+
+        setAllCustomers(withCounts)
       } catch (e: any) {
-        setError(e.message ?? "Failed to load customers.")
+        setError(e.message ?? "Failed to load data.")
       } finally {
         setLoading(false)
       }
     }
 
-    fetchCustomers()
+    fetchData()
   }, [db, fromDate, toDate])
 
-  // ----- Real-time updates for new customers -----
+  // -----------------------------------------------------
+  // REAL-TIME LISTENER (ONLY LATEST 10)
+  // -----------------------------------------------------
   useEffect(() => {
     if (allCustomers.length === 0) return
 
-    // Set up real-time listener for new customers
     const realtimeQuery = query(
       collection(db, "customer"),
       where("userType.customer", "==", true),
@@ -130,31 +141,33 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
     )
 
     const unsub = onSnapshot(realtimeQuery, (snapshot) => {
-      const newDocs: CustomerDoc[] = []
+      const added: CustomerDoc[] = []
 
       snapshot.docChanges().forEach((change) => {
-        if (change.type === "added") {
-          const doc = { id: change.doc.id, ...(change.doc.data() as any) } as CustomerDoc
+        if (change.type !== "added") return
 
-          // Check if this customer is not already in our list AND falls within date range
-          if (!allCustomers.some(customer => customer.id === doc.id)) {
-            const createdDate = doc.created_time?.toDate();
-            const startDate = new Date(fromDate + "T00:00:00Z");
-            const endDate = new Date(toDate + "T23:59:59Z");
+        const doc = { id: change.doc.id, ...(change.doc.data() as any) } as CustomerDoc
 
-            if (createdDate && createdDate >= startDate && createdDate <= endDate) {
-              newDocs.push(doc)
-            }
+        if (!allCustomers.some((c) => c.id === doc.id)) {
+          const created = doc.created_time?.toDate()
+          if (!created) return
+
+          const start = new Date(fromDate + "T00:00:00")
+          const end = new Date(toDate + "T23:59:59")
+
+          if (created >= start && created <= end) {
+            doc.bookingCount = 0
+            added.push(doc)
           }
         }
       })
 
-      if (newDocs.length > 0) {
-        setAllCustomers(prev => {
-          const combined = [...newDocs, ...prev]
+      if (added.length > 0) {
+        setAllCustomers((prev) => {
+          const combined = [...added, ...prev]
           return combined.sort((a, b) => {
-            const dateA = a.created_time?.toDate?.() || new Date(0)
-            const dateB = b.created_time?.toDate?.() || new Date(0)
+            const dateA = a.created_time?.toDate?.() ?? new Date(0)
+            const dateB = b.created_time?.toDate?.() ?? new Date(0)
             return dateB.getTime() - dateA.getTime()
           })
         })
@@ -162,15 +175,16 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
     })
 
     return () => unsub()
-  }, [db, allCustomers.length, fromDate, toDate])
+  }, [allCustomers.length, fromDate, toDate, db])
 
-  // ----- Filter and Search Logic -----
+  // -----------------------------------------------------
+  // FILTER + SEARCH
+  // -----------------------------------------------------
   const filteredCustomers = useMemo(() => {
+    let results = allCustomers
     const term = search.trim().toLowerCase()
 
-    let results = allCustomers
-
-    // 🔎 Apply search filter
+    // Search
     if (term) {
       results = results.filter((c) => {
         const text = [
@@ -180,7 +194,6 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
           c.phone_number,
           c.contact_no,
           c.uid,
-          c.bio,
         ]
           .map(normalize)
           .join(" ")
@@ -189,55 +202,94 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
       })
     }
 
-    // 🏷️ Apply membership filter
-    if (membershipFilter === "member") {
-      results = results.filter((c) => c.Subscription === "Active")
-    } else if (membershipFilter === "non-member") {
-      results = results.filter((c) => c.Subscription !== "Active")
-    }
+    // Booking filters
+    if (bookingFilter === "0") results = results.filter((c) => c.bookingCount === 0)
+    else if (bookingFilter === "1") results = results.filter((c) => c.bookingCount === 1)
+    else if (bookingFilter === "2") results = results.filter((c) => c.bookingCount === 2)
+    else if (bookingFilter === "2plus") results = results.filter((c) => c.bookingCount! >= 3)
 
     return results
-  }, [allCustomers, search, membershipFilter])
+  }, [allCustomers, search, bookingFilter])
 
-  // ----- Pagination for filtered results -----
+  // Pagination
   const paginatedCustomers = useMemo(() => {
-    const startIndex = (currentPage - 1) * PAGE_SIZE
-    const endIndex = startIndex + PAGE_SIZE
-    return filteredCustomers.slice(startIndex, endIndex)
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filteredCustomers.slice(start, start + PAGE_SIZE)
   }, [filteredCustomers, currentPage])
 
   const totalPages = Math.ceil(filteredCustomers.length / PAGE_SIZE)
-  const hasNextPage = currentPage < totalPages
-  const hasPrevPage = currentPage > 1
 
-  // ----- Reset pagination when search or filter changes -----
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search, membershipFilter])
+  useEffect(() => setCurrentPage(1), [search, bookingFilter])
 
-  // ----- Pagination handlers -----
-  const goNext = () => {
-    if (hasNextPage) {
-      setCurrentPage(prev => prev + 1)
-    }
-  }
+  // -----------------------------------------------------
+  // HELPERS
+  // -----------------------------------------------------
+  const fmtDate = (t?: Timestamp) =>
+    t?.toDate ? t.toDate().toLocaleString() : "—"
 
-  const goPrev = () => {
-    if (hasPrevPage) {
-      setCurrentPage(prev => prev - 1)
-    }
-  }
+  const fmtPhone = (c: CustomerDoc) =>
+    c.phone_number ?? c.contact_no?.toString() ?? "—"
 
-  // ----- Helper functions -----
-  const fmtDate = (t?: Timestamp) => (t?.toDate ? t.toDate().toLocaleString() : "—")
-  const fmtPhone = (c: CustomerDoc) => c.phone_number ?? (c.contact_no ? String(c.contact_no) : "—")
   const fmtLatLng = (loc: LatLng) => {
     if (!loc) return "—"
     const lat = (loc as any).latitude ?? (loc as any).lat
     const lng = (loc as any).longitude ?? (loc as any).lng
-    return typeof lat === "number" && typeof lng === "number" ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : "—"
+    if (typeof lat === "number" && typeof lng === "number")
+      return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+    return "—"
   }
 
+  // -----------------------------------------------------
+  // EXPORT CSV
+  // -----------------------------------------------------
+  const exportCSV = () => {
+    const header = ["ID", "Name", "Email", "Phone", "Bookings", "Created"]
+
+    const rows = filteredCustomers.map((c) => [
+      c.id,
+      c.display_name || "",
+      c.email || "",
+      fmtPhone(c),
+      c.bookingCount || 0,
+      fmtDate(c.created_time)
+    ])
+
+    const csv = [header, ...rows].map((r) => r.join(",")).join("\n")
+
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "customers.csv"
+    a.click()
+  }
+
+  // -----------------------------------------------------
+  // EXPORT EXCEL
+  // -----------------------------------------------------
+  const exportExcel = () => {
+    import("xlsx").then((xlsx) => {
+      const data = filteredCustomers.map((c) => ({
+        ID: c.id,
+        Name: c.display_name || "",
+        Email: c.email || "",
+        Phone: fmtPhone(c),
+        Bookings: c.bookingCount || 0,
+        Created: fmtDate(c.created_time)
+      }))
+
+      const ws = xlsx.utils.json_to_sheet(data)
+      const wb = xlsx.utils.book_new()
+      xlsx.utils.book_append_sheet(wb, ws, "Customers")
+
+      xlsx.writeFile(wb, "customers.xlsx")
+    })
+  }
+
+  // -----------------------------------------------------
+  // RENDER
+  // -----------------------------------------------------
   return (
     <Card>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -245,131 +297,89 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
           <Users className="h-5 w-5 text-primary" />
           Customers ({filteredCustomers.length} total)
         </CardTitle>
+
         <div className="flex gap-2">
           <div className="relative sm:w-80">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search name / email / phone / bio..."
+              placeholder="Search name / email / phone..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8"
             />
           </div>
-          <div className="relative">
-            <select
-              value={membershipFilter}
-              onChange={(e) => setMembershipFilter(e.target.value as "all" | "member" | "non-member")}
-              className="border rounded-md px-3 py-2 text-sm"
-            >
-              <option value="all">All Customers</option>
-              <option value="member">Members</option>
-              <option value="non-member">Non-Members</option>
-            </select>
-          </div>
+
+          {/* Booking Filter */}
+          <select
+            value={bookingFilter}
+            onChange={(e) => setBookingFilter(e.target.value as any)}
+            className="border rounded-md px-3 py-2 text-sm"
+          >
+            <option value="all">All Customers</option>
+            <option value="0">0 Bookings</option>
+            <option value="1">1 Booking</option>
+            <option value="2">2 Bookings</option>
+            <option value="2plus">2+ Bookings</option>
+          </select>
+
+          <Button variant="outline" onClick={exportCSV}>CSV</Button>
+          <Button variant="outline" onClick={exportExcel}>Excel</Button>
         </div>
       </CardHeader>
-      <CardContent>
-        {/* Results info */}
-        {search && (
-          <div className="mb-4 text-sm text-muted-foreground">
-            Showing {filteredCustomers.length} results for "{search}"
-          </div>
-        )}
 
+      <CardContent>
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center py-8">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading customers…
+          <div className="flex items-center gap-2 justify-center py-8">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading...
           </div>
         ) : error ? (
-          <div className="text-sm text-red-600 text-center py-8">{error}</div>
+          <div className="text-red-600 text-center py-8">{error}</div>
         ) : (
           <>
             <div className="rounded-md border">
               <Table>
-                <TableCaption>Customer records (userType.customer = true)</TableCaption>
+                <TableCaption>Customer records</TableCaption>
                 <TableHeader>
                   <TableRow>
                     <TableHead>UID</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
-                    <TableHead>User Type</TableHead>
-                    <TableHead>Membership</TableHead>
+                    <TableHead>Bookings</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
                   {paginatedCustomers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-8">
-                        {filteredCustomers.length === 0 ? (
-                          search ?
-                            "No customers found matching your search criteria." :
-                            "No customers found in this date range."
-                        ) : (
-                          "No more results on this page."
-                        )}
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        No customers found.
                       </TableCell>
                     </TableRow>
                   ) : (
                     paginatedCustomers.map((c) => (
-                      <TableRow key={c.id} className="hover:bg-muted/50">
-                        <TableCell>{c.uid ?? "—"}</TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <div className="font-medium">{c.display_name || "—"}</div>
-                            {c.phone_number && (
-                              <div className="flex items-center text-sm text-muted-foreground">
-                                <Phone className="h-3 w-3 mr-1" />
-                                {c.phone_number}
-                              </div>
-                            )}
-                          </div>
+                      <TableRow key={c.id}>
+                        <TableCell>{c.uid || "—"}</TableCell>
+                        <TableCell>{c.display_name || "—"}</TableCell>
+                        <TableCell>{c.email || "—"}</TableCell>
+                        <TableCell>{fmtPhone(c)}</TableCell>
+                        <TableCell>{c.bookingCount ?? 0}</TableCell>
+                        <TableCell className="text-xs font-mono">
+                          {fmtLatLng(c.location ?? null)}
                         </TableCell>
-                        <TableCell>{c.email ?? "—"}</TableCell>
-                        <TableCell className="font-mono">{fmtPhone(c)}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1 flex-wrap">
-                            {c.userType?.customer && (
-                              <Badge variant="default" className="text-xs">Customer</Badge>
-                            )}
-                            {c.userType?.provider && (
-                              <Badge variant="secondary" className="text-xs">Provider</Badge>
-                            )}
-                            {c.userType?.admin && (
-                              <Badge variant="destructive" className="text-xs">Admin</Badge>
-                            )}
-                            {c.userType?.AgencyPartner && (
-                              <Badge variant="outline" className="text-xs">Partner</Badge>
-                            )}
-                            {!c.userType && <span className="text-muted-foreground">—</span>}
-                          </div>
+                        <TableCell className="text-xs">
+                          {fmtDate(c.created_time)}
                         </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={c.Subscription === "Active" ? "default" : "secondary"}
-                            className={
-                              c.Subscription === "Active"
-                                ? "bg-green-100 text-green-800 hover:bg-green-200"
-                                : "bg-gray-100 text-gray-800"
-                            }
-                          >
-                            {c.Subscription === "Active" ? "Member" : "Non-Member"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{fmtLatLng(c.location ?? null)}</TableCell>
-                        <TableCell className="text-xs">{fmtDate(c.created_time)}</TableCell>
                         <TableCell>
                           <Button
-                            variant="outline"
                             size="sm"
+                            variant="outline"
                             onClick={() => router.push(`/customers/${c.id}`)}
-                            className="flex items-center gap-2"
                           >
-                            <Eye className="h-4 w-4" />
-                            View
+                            <Eye className="h-4 w-4" /> View
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -381,20 +391,23 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
 
             {/* Pagination */}
             <div className="flex items-center justify-between mt-4">
-              <div className="text-sm text-muted-foreground">
+              <div className="text-sm">
                 Page {currentPage} of {totalPages || 1}
-                {filteredCustomers.length > 0 && (
-                  <span className="ml-2">
-                    ({((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredCustomers.length)} of {filteredCustomers.length})
-                  </span>
-                )}
               </div>
+
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={goPrev} disabled={!hasPrevPage || loading}>
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+                <Button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" /> Prev
                 </Button>
-                <Button variant="outline" size="sm" onClick={goNext} disabled={!hasNextPage || loading}>
-                  Next <ChevronRight className="h-4 w-4 ml-1" />
+
+                <Button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                >
+                  Next <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
