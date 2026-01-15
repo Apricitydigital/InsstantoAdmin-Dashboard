@@ -73,15 +73,15 @@ export function DailyOverviewCard() {
                 </p>
               </div>
               <div className="p-3 rounded-md border bg-gray-50">
-                <p className="text-xs text-gray-500">Booking Amount</p>
+                <p className="text-xs text-gray-500"> Available Partners Today:</p>
                 <p className="text-lg font-semibold">
-                  {formatINR(overview?.totalBookingAmount || 0)}
+                  {(services.length || 0)}
                 </p>
               </div>
             </div>
 
             {/* Total */}
-            <div className="flex items-center gap-2 mb-3 text-gray-700">
+            {/* <div className="flex items-center gap-2 mb-3 text-gray-700">
               <TrendingUp className="w-4 h-4 text-green-600" />
               <p className="text-sm font-medium">
                 Available Partners Today:
@@ -89,7 +89,7 @@ export function DailyOverviewCard() {
                   {services.length}
                 </span>
               </p>
-            </div>
+            </div> */}
 
             {/* List */}
             <div className="text-sm font-medium text-gray-700 mb-2">
@@ -107,9 +107,9 @@ export function DailyOverviewCard() {
                       <ArrowRight className="h-4 w-4 text-blue-400" />
                       {srv.name}
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-600">
+                    {/* <div className="text-xs sm:text-sm text-gray-600">
                       {srv.count}× — {formatINR(srv.amount)}
-                    </div>
+                    </div> */}
                   </div>
                 ))
               ) : (

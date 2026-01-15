@@ -78,12 +78,22 @@ type Partner = {
   type: "provider" | "agency"
   joinDate: string
   status: string
+  serviceOptName: string | null
 }
 
 interface PartnerTableProps {
   fromDate: string
   toDate: string
 }
+
+/* ------------------------------------------------------------------ */
+/* UTILS */
+/* ------------------------------------------------------------------ */
+
+const chunkArray = <T,>(arr: T[], size = 10) =>
+  Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+    arr.slice(i * size, i * size + size)
+  )
 
 /* ------------------------------------------------------------------ */
 /* COMPONENT */
@@ -122,9 +132,35 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
 
       const allDocs = [...providerSnap.docs, ...agencySnap.docs]
 
+      /* ---- collect service_subcategory ids ---- */
+      const serviceIds = Array.from(
+        new Set(
+          allDocs
+            .map((d) => d.data().partner_serviceOpt)
+            .filter(Boolean)
+        )
+      )
+
+      /* ---- fetch service_subcategories ---- */
+      const serviceMap: Record<string, string> = {}
+      const chunks = chunkArray(serviceIds)
+
+      await Promise.all(
+        chunks.map(async (ids) => {
+          const snap = await getDocs(
+            query(
+              collection(db, "service_subcategories"),
+              where("__name__", "in", ids)
+            )
+          )
+          snap.forEach((doc) => {
+            serviceMap[doc.id] = doc.data().name
+          })
+        })
+      )
+
       const data: Partner[] = allDocs.map((doc) => {
         const d = doc.data()
-
         return {
           id: doc.id,
           display_name: d.display_name || "Unknown",
@@ -135,6 +171,9 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
               ? d.created_time.toDate().toISOString()
               : new Date(0).toISOString(),
           status: d.partner_status || "Information_Unverified",
+          serviceOptName: d.partner_serviceOpt
+            ? serviceMap[d.partner_serviceOpt] || "Unknown"
+            : null,
         }
       })
 
@@ -169,7 +208,8 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
         p.display_name
           .toLowerCase()
           .includes(searchTerm.toLowerCase()) ||
-        p.phone_number.includes(searchTerm)
+        p.phone_number.includes(searchTerm) ||
+        p.serviceOptName?.toLowerCase().includes(searchTerm.toLowerCase() )
 
       const matchesType =
         typeFilter === "all" ||
@@ -209,6 +249,7 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
       "Name",
       "Phone",
       "Type",
+      "Service Opt",
       "Join Date",
       "Status",
     ]
@@ -218,6 +259,7 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
       p.display_name,
       p.phone_number,
       p.type,
+      p.serviceOptName || "N/A",
       new Date(p.joinDate).toLocaleDateString("en-IN"),
       p.status,
     ])
@@ -251,12 +293,8 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
             </CardDescription>
           </div>
 
-          <Button
-            variant="outline"
-            onClick={exportCSV}
-            className="flex gap-2"
-          >
-            <Download className="h-4 w-4" />
+          <Button variant="outline" onClick={exportCSV}>
+            <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
         </div>
@@ -308,7 +346,10 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               {STATUS_OPTIONS.map((s) => (
-                <DropdownMenuItem key={s} onClick={() => setStatusFilter(s)}>
+                <DropdownMenuItem
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                >
                   {s}
                 </DropdownMenuItem>
               ))}
@@ -325,6 +366,7 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
                 <TableHead>Partner</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Contact</TableHead>
+                <TableHead>Service Opt</TableHead>
                 <TableHead>Join Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead />
@@ -342,6 +384,13 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
                     <Badge variant="secondary">{p.type}</Badge>
                   </TableCell>
                   <TableCell>{p.phone_number}</TableCell>
+                  <TableCell>
+                    {p.serviceOptName ? (
+                      <Badge variant="outline">{p.serviceOptName}</Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">N/A</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {new Date(p.joinDate).toLocaleDateString("en-IN")}
                   </TableCell>

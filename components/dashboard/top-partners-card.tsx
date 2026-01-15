@@ -78,8 +78,7 @@ export function TopPartnersCard() {
                   </div>
 
                   <div className="text-xs sm:text-sm text-gray-600 flex-1 text-center">
-                    {partner.completedBookings} completed /{" "}
-                    {partner.totalBookings} total
+                Earnings
                   </div>
 
                   <div className="flex justify-end flex-1">
