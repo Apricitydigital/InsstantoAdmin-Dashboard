@@ -1,294 +1,317 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  Timestamp,
+} from "firebase/firestore"
+import { getFirestoreDb } from "@/lib/firebase"
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   DropdownMenu,
+  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Search, MoreHorizontal, Eye, Edit, CheckCircle, XCircle, DollarSign, Pause } from "lucide-react"
-import Link from "next/link"
-import { collection, getDocs, query, where, doc, Timestamp } from "firebase/firestore"
-import { getFirestoreDb } from "@/lib/firebase"
 
-// Define Partner type
+import { Search, Eye, Download } from "lucide-react"
+
+/* ------------------------------------------------------------------ */
+/* CONSTANTS */
+/* ------------------------------------------------------------------ */
+
+const ALLOWED_PARTNER_IDS = [
+  "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
+  "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
+  "VxxapfO7l8YM5f6xmFqpThc17eD3",
+  "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
+  "7KlujhUyJbeCTPG6Pty8exlxXuM2",
+  "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
+  "MstGdrDCHkZ1KKf0xtZctauIovf2",
+  "OgioZJvg0DWWRnqZLj2AUMUljZN2",
+  "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
+  "uSZdJdat03froahSdGmPpFWDGhi2",
+]
+
+const STATUS_OPTIONS = [
+  "All",
+  "DocumentsUploaded",
+  "Onboarded",
+  "Information_Verified",
+  "Id_Generated",
+  "RegistrationFormFilled",
+  "Information_Unverified",
+] as const
+
+type StatusFilter = typeof STATUS_OPTIONS[number]
+
+/* ------------------------------------------------------------------ */
+/* TYPES */
+/* ------------------------------------------------------------------ */
+
 type Partner = {
   id: string
-  uid?: string
   display_name: string
   phone_number: string
-  contact_no: number
   type: "provider" | "agency"
-  city: string
-  services: string[]
-  created_time?: Timestamp
   joinDate: string
-  rating: number
-  reviewCount: number
-  earnings: number
-  pendingPayouts: number
-  kycStatus: "verified" | "pending" | "rejected"
-  status: "active" | "pending" | "suspended" | "rejected"
+  status: string
 }
 
 interface PartnerTableProps {
-  fromDate: string;
-  toDate: string;
+  fromDate: string
+  toDate: string
 }
-export function PartnerTable() {
+
+/* ------------------------------------------------------------------ */
+/* COMPONENT */
+/* ------------------------------------------------------------------ */
+
+export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
   const [partners, setPartners] = useState<Partner[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [typeFilter, setTypeFilter] =
+    useState<"all" | "provider" | "agency">("all")
+  const [partnerIdFilter, setPartnerIdFilter] =
+    useState<"all" | "specific">("all")
+  const [statusFilter, setStatusFilter] =
+    useState<StatusFilter>("All")
+
+  /* ---------------- FETCH ---------------- */
 
   useEffect(() => {
     const fetchPartners = async () => {
-      try {
-        const db = getFirestoreDb()
+      const db = getFirestoreDb()
 
-        // --- Step 1: Fetch partners (providers + agencies) ---
-        const q1 = query(
-          collection(db, "customer"),
-          where("userType.provider", "==", true),
-          where("partner_status", "==", "Onboarded")
-        )
-        const q2 = query(
-          collection(db, "customer"),
-          where("userType.AgencyPartner", "==", true),
-          where("partner_status", "==", "Onboarded")
-        )
+      const providerQuery = query(
+        collection(db, "customer"),
+        where("userType.provider", "==", true)
+      )
 
-        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)])
-        const allPartners = [...snap1.docs, ...snap2.docs]
+      const agencyQuery = query(
+        collection(db, "customer"),
+        where("userType.AgencyPartner", "==", true)
+      )
 
-        // Collect partner IDs
-        const partnerIds = allPartners.map((d) => d.id)
+      const [providerSnap, agencySnap] = await Promise.all([
+        getDocs(providerQuery),
+        getDocs(agencyQuery),
+      ])
 
-        // --- Step 2: Fetch Wallet + Form data in parallel ---
-        const walletQueries = []
-        for (let i = 0; i < partnerIds.length; i += 10) {
-          walletQueries.push(
-            getDocs(
-              query(
-                collection(db, "Wallet_Overall"),
-                where("service_partner_id", "in", partnerIds.slice(i, i + 10).map(id => doc(db, "customer", id)))
-              )
-            )
-          )
-        }
+      const allDocs = [...providerSnap.docs, ...agencySnap.docs]
 
-        const formQueries = []
-        for (let i = 0; i < partnerIds.length; i += 10) {
-          formQueries.push(
-            getDocs(
-              query(
-                collection(db, "form_details"),
-                where("provider_ref", "in", partnerIds.slice(i, i + 10).map(id => doc(db, "customer", id)))
-              )
-            )
-          )
-        }
+      const data: Partner[] = allDocs.map((doc) => {
+        const d = doc.data()
 
-        // --- Step 3: Fetch reviews for all partners in parallel ---
-        const reviewQueries = []
-        for (let i = 0; i < partnerIds.length; i += 10) {
-          reviewQueries.push(
-            getDocs(
-              query(
-                collection(db, "reviews"),
-                where("partnerId", "in", partnerIds.slice(i, i + 10).map(id => doc(db, "customer", id)))
-              )
-            )
-          )
-        }
-
-        const [walletSnaps, formSnaps, reviewSnaps] = await Promise.all([
-          Promise.all(walletQueries),
-          Promise.all(formQueries),
-          Promise.all(reviewQueries),
-        ])
-
-        // --- Step 4: Build maps ---
-        const walletMap: Record<string, { earnings: number; pendingPayouts: number }> = {}
-        walletSnaps.flat().forEach((snap) =>
-          snap.forEach((doc) => {
-            const d = doc.data()
-            if (d.service_partner_id?.id) {
-              walletMap[d.service_partner_id.id] = {
-                earnings: d.TotalAmountComeIn_Wallet || 0,
-                pendingPayouts: d.total_balance || 0,
-              }
-            }
-          })
-        )
-
-        const serviceMap: Record<string, string> = {}
-        formSnaps.flat().forEach((snap) =>
-          snap.forEach((doc) => {
-            const d = doc.data()
-            if (d.provider_ref?.id) {
-              serviceMap[d.provider_ref.id] = d.serviceOpt || "N/A"
-            }
-          })
-        )
-
-        const reviewMap: Record<string, { avg: number; count: number }> = {}
-        reviewSnaps.flat().forEach((snap) =>
-          snap.forEach((doc) => {
-            const r = doc.data()
-            const partnerId = r.partnerId?.id
-            if (!partnerId) return
-            if (!reviewMap[partnerId]) reviewMap[partnerId] = { avg: 0, count: 0 }
-
-            if (r.partnerRating) {
-              reviewMap[partnerId].avg += r.partnerRating
-              reviewMap[partnerId].count++
-            }
-          })
-        )
-
-        // Fix avg calc
-        Object.keys(reviewMap).forEach((id) => {
-          const { avg, count } = reviewMap[id]
-          reviewMap[id].avg = count > 0 ? avg / count : 0
-        })
-
-        // --- Step 5: Merge everything into partnersData ---
-        const partnersData: Partner[] = allPartners.map((docSnap) => {
-          const d = docSnap.data()
-          const wallet = walletMap[docSnap.id] || { earnings: 0, pendingPayouts: 0 }
-          const review = reviewMap[docSnap.id] || { avg: 0, count: 0 }
-
-          return {
-            id: docSnap.id,
-            display_name: d.display_name || "Unknown",
-            phone_number: d.phone_number || "N/A",
-            contact_no: d.contact_number || "N/A",
-            type: d.userType?.AgencyPartner ? "agency" : "provider",
-            city: d.city || "N/A",
-            services: d.userType?.AgencyPartner
-              ? ["Full Home"]
-              : serviceMap[docSnap.id]
-                ? [serviceMap[docSnap.id]]
-                : [],
-            joinDate: d.created_time instanceof Timestamp
+        return {
+          id: doc.id,
+          display_name: d.display_name || "Unknown",
+          phone_number: d.phone_number || "N/A",
+          type: d.userType?.AgencyPartner ? "agency" : "provider",
+          joinDate:
+            d.created_time instanceof Timestamp
               ? d.created_time.toDate().toISOString()
-              : new Date().toISOString(),
-            rating: review.avg,
-            reviewCount: review.count,
-            earnings: wallet.earnings,
-            pendingPayouts: wallet.pendingPayouts,
-            kycStatus: d.kyc_status || "pending",
-            status: d.partner_status || "pending",
-          }
-        })
+              : new Date(0).toISOString(),
+          status: d.partner_status || "Information_Unverified",
+        }
+      })
 
-        // Filter only allowed IDs
-        const allowedIds = [
-       "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-        "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-        "VxxapfO7l8YM5f6xmFqpThc17eD3",
-        "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
-        "7KlujhUyJbeCTPG6Pty8exlxXuM2",
-        "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
-        "MstGdrDCHkZ1KKf0xtZctauIovf2",
-        "OgioZJvg0DWWRnqZLj2AUMUljZN2",
-        "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
-        "uSZdJdat03froahSdGmPpFWDGhi2",
+      data.sort(
+        (a, b) =>
+          new Date(b.joinDate).getTime() -
+          new Date(a.joinDate).getTime()
+      )
 
-        ]
-        setPartners(partnersData.filter((p) => allowedIds.includes(p.id)))
-      } catch (error) {
-        console.error("Error fetching partners:", error)
-      }
+      setPartners(data)
     }
 
     fetchPartners()
   }, [])
 
+  /* ---------------- DATE RANGE ---------------- */
 
-  const filteredPartners = partners.filter((partner) => {
-    const matchesSearch =
-      partner.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      partner.phone_number.includes(searchTerm)
+  const startDate = new Date(fromDate)
+  const endDate = new Date(toDate)
+  endDate.setHours(23, 59, 59, 999)
 
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "provider" && partner.type === "provider") ||
-      (statusFilter === "agency" && partner.type === "agency")
+  /* ---------------- FILTERING ---------------- */
 
-    return matchesSearch && matchesStatus
-  })
+  const filteredPartners = useMemo(() => {
+    return partners.filter((p) => {
+      const joined = new Date(p.joinDate)
 
-  const getStatusBadge = (status: Partner["status"]) => {
-    switch (status) {
-      case "active":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Active</Badge>
-      case "pending":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>
-      case "suspended":
-        return <Badge variant="destructive">Suspended</Badge>
-      case "rejected":
-        return <Badge variant="outline">Rejected</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
+      const matchesDate =
+        joined >= startDate && joined <= endDate
+
+      const matchesSearch =
+        p.display_name
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        p.phone_number.includes(searchTerm)
+
+      const matchesType =
+        typeFilter === "all" ||
+        (typeFilter === "provider" && p.type === "provider") ||
+        (typeFilter === "agency" && p.type === "agency")
+
+      const matchesPartnerIds =
+        partnerIdFilter === "all" ||
+        ALLOWED_PARTNER_IDS.includes(p.id)
+
+      const matchesStatus =
+        statusFilter === "All" || p.status === statusFilter
+
+      return (
+        matchesDate &&
+        matchesSearch &&
+        matchesType &&
+        matchesPartnerIds &&
+        matchesStatus
+      )
+    })
+  }, [
+    partners,
+    searchTerm,
+    typeFilter,
+    partnerIdFilter,
+    statusFilter,
+    fromDate,
+    toDate,
+  ])
+
+  /* ---------------- EXPORT ---------------- */
+
+  const exportCSV = () => {
+    const headers = [
+      "Partner ID",
+      "Name",
+      "Phone",
+      "Type",
+      "Join Date",
+      "Status",
+    ]
+
+    const rows = filteredPartners.map((p) => [
+      p.id,
+      p.display_name,
+      p.phone_number,
+      p.type,
+      new Date(p.joinDate).toLocaleDateString("en-IN"),
+      p.status,
+    ])
+
+    const csv =
+      [headers, ...rows]
+        .map((row) => row.map((v) => `"${v}"`).join(","))
+        .join("\n")
+
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `partners_${fromDate}_to_${toDate}.csv`
+    a.click()
+
+    URL.revokeObjectURL(url)
   }
 
-  const getKycBadge = (status: Partner["kycStatus"]) => {
-    switch (status) {
-      case "verified":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Verified</Badge>
-      case "pending":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>
-      case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
-  }
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount)
-
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+  /* ---------------- UI ---------------- */
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Partner Management</CardTitle>
-        <CardDescription>Manage and monitor all service partners</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Partner Management</CardTitle>
+            <CardDescription>
+              Showing {filteredPartners.length} partners
+            </CardDescription>
+          </div>
 
-        {/* Search and Filters */}
-        <div className="flex items-center gap-4 pt-4">
-          <div className="relative flex-1 max-w-sm">
+          <Button
+            variant="outline"
+            onClick={exportCSV}
+            className="flex gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap gap-3 pt-4">
+          <div className="relative max-w-sm flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search partners..."
+              placeholder="Search partner..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-8"
             />
           </div>
 
+          {/* TYPE */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">Type: {typeFilter}</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => setTypeFilter("all")}>All</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTypeFilter("provider")}>Provider</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTypeFilter("agency")}>Agency</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* PARTNER IDS */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">
-                Filter: {statusFilter === "all" ? "All" : statusFilter === "provider" ? "Provider" : "Agency Partner"}
+                Partner IDs: {partnerIdFilter === "all" ? "All" : "Specific"}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => setStatusFilter("all")}>All</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setStatusFilter("provider")}>Provider</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setStatusFilter("agency")}>Agency Partner</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPartnerIdFilter("all")}>
+                All
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPartnerIdFilter("specific")}>
+                Specific
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* STATUS */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">Status: {statusFilter}</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              {STATUS_OPTIONS.map((s) => (
+                <DropdownMenuItem key={s} onClick={() => setStatusFilter(s)}>
+                  {s}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -300,116 +323,37 @@ export function PartnerTable() {
             <TableHeader>
               <TableRow>
                 <TableHead>Partner</TableHead>
-                <TableHead>Partner Type</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Contact</TableHead>
-                <TableHead>Services</TableHead>
                 <TableHead>Join Date</TableHead>
-                <TableHead>Performance</TableHead>
-                <TableHead>Earnings</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-[50px]">Actions</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
+
             <TableBody>
-              {filteredPartners.map((partner) => (
-                <TableRow key={partner.id} className="hover:bg-muted/50">
+              {filteredPartners.map((p) => (
+                <TableRow key={p.id}>
                   <TableCell>
-                    <div>
-                      <div className="font-medium">{partner.display_name}</div>
-                      <div className="text-sm text-muted-foreground">{partner.id}</div>
-                    </div>
+                    <div className="font-medium">{p.display_name}</div>
+                    <div className="text-xs text-muted-foreground">{p.id}</div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className="text-xs">
-                      {partner.type === "provider" ? "Provider" : "Agency"}
-                    </Badge>
-
+                    <Badge variant="secondary">{p.type}</Badge>
+                  </TableCell>
+                  <TableCell>{p.phone_number}</TableCell>
+                  <TableCell>
+                    {new Date(p.joinDate).toLocaleDateString("en-IN")}
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm">
-                      <div>{partner.phone_number}</div>
-                    </div>
+                    <Badge variant="outline">{p.status}</Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {partner.services.length > 0 ? (
-                        partner.services.map((service) => (
-                          <Badge key={service} variant="outline" className="text-xs">
-                            {service}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-muted-foreground">N/A</span>
-                      )}
-                    </div>
-                  </TableCell>
-
-                  <TableCell>{formatDate(partner.joinDate)}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">Rating: {partner.rating.toFixed(1)}</span>
-                        {partner.rating > 0 && <span className="text-yellow-500">★</span>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{partner.reviewCount} reviews</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      <div className="font-medium">{formatCurrency(partner.earnings)}</div>
-                      {partner.pendingPayouts > 0 && (
-                        <div className="text-xs text-secondary">Pending: {formatCurrency(partner.pendingPayouts)}</div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(partner.status)}</TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild>
-                          <Link href={`/partners/${partner.id}`}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Partner
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <DollarSign className="mr-2 h-4 w-4" />
-                          Process Payout
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        {partner.status === "pending" && (
-                          <>
-                            <DropdownMenuItem className="text-green-600">
-                              <CheckCircle className="mr-2 h-4 w-4" />
-                              Approve Partner
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive">
-                              <XCircle className="mr-2 h-4 w-4" />
-                              Reject Partner
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                        {partner.status === "active" && (
-                          <DropdownMenuItem className="text-destructive">
-                            <Pause className="mr-2 h-4 w-4" />
-                            Suspend Partner
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Link href={`/partners/${p.id}`}>
+                      <Button size="icon" variant="ghost">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </TableCell>
                 </TableRow>
               ))}
@@ -418,7 +362,9 @@ export function PartnerTable() {
         </div>
 
         {filteredPartners.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground">No partners found matching your search criteria.</div>
+          <div className="py-8 text-center text-muted-foreground">
+            No partners found
+          </div>
         )}
       </CardContent>
     </Card>
