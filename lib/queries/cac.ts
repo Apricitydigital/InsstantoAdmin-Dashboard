@@ -10,6 +10,7 @@ import {
   DocumentReference,
 } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
+import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
 
 export type MonthlyCACPoint = {
   key: string; // YYYY-MM (for sorting)
@@ -124,17 +125,8 @@ export async function fetchCACMonthlyPoints(fromDate?: string, toDate?: string):
   const fromTS = Timestamp.fromDate(from);
   const toTS = Timestamp.fromDate(to);
 
-  // Provider filter
-  const providerIds = [
-    "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-    "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-    "VxxapfO7l8YM5f6xmFqpThc17eD3",
-    "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
-    "7KlujhUyJbeCTPG6Pty8exlxXuM2",
-    "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
-    "MstGdrDCHkZ1KKf0xtZctauIovf2",
-    "OgioZJvg0DWWRnqZLj2AUMUljZN2",
-  ];
+  // Provider filter (using first 8 providers)
+  const providerIds = PROVIDER_ID_LIST.slice(0, 8);
   const providerRefs = providerIds.map((id) => docRef(db, "customer", id));
 
   // 1) Pull marketing monthly totals from Google Sheet

@@ -8,8 +8,10 @@ import {
   Timestamp,
   doc as docRef,
   DocumentReference,
+  getDoc,
 } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
+import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
 
 export type BookingStats = {
   totalBookings: number;
@@ -127,18 +129,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
   /* ------------------------------
      PROVIDER FILTERS
   ------------------------------ */
-  const providerIds = [
-  "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-        "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-        "VxxapfO7l8YM5f6xmFqpThc17eD3",
-        "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
-        "7KlujhUyJbeCTPG6Pty8exlxXuM2",
-        "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
-        "MstGdrDCHkZ1KKf0xtZctauIovf2",
-        "OgioZJvg0DWWRnqZLj2AUMUljZN2",
-        "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
-        "uSZdJdat03froahSdGmPpFWDGhi2",
-  ];
+  const providerIds = PROVIDER_ID_LIST;
 
   const providerRefs = providerIds.map((id) => docRef(db, "customer", id));
 
@@ -354,4 +345,89 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     cacChange: Number(cacChange.toFixed(1)),
     netPnL: Number(netPnL.toFixed(2)),
   };
+}
+
+/* ==============================
+   CATEGORY-WISE BOOKINGS
+============================== */
+export async function fetchCategoryWiseBookings(
+  fromDate?: string,
+  toDate?: string
+): Promise<Record<string, number>> {
+  const db = getFirestoreDb();
+  const now = new Date();
+
+  const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+  const defaultTo = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+  const from = fromDate ? new Date(fromDate + "T00:00:00") : defaultFrom;
+  const to = toDate ? new Date(toDate + "T23:59:59") : defaultTo;
+
+  const fromTS = Timestamp.fromDate(from);
+  const toTS = Timestamp.fromDate(to);
+
+  const providerIds = PROVIDER_ID_LIST;
+  const providerRefs = providerIds.map((id) => docRef(db, "customer", id));
+
+  const bookingsCol = collection(db, "bookings");
+
+  // Get all completed bookings in the date range
+  const completedSnap = await getDocs(
+    query(
+      bookingsCol,
+      where("provider_id", "in", providerRefs),
+      // where("status", "==", "Service_Completed"),
+      where("date", ">=", fromTS),
+      where("date", "<=", toTS)
+    )
+  );
+
+  const categoryCount: Record<string, number> = {
+    Cleaning: 0,
+    Electrical: 0,
+    Security: 0,
+    Driver: 0,
+  };
+
+  // Count bookings by category
+  for (const docSnap of completedSnap.docs) {
+    const booking = docSnap.data() as any;
+    const subCatRef = booking.subCategoryCart_id;
+
+    if (subCatRef) {
+      try {
+        // Get the subcategory document
+        const subCatSnap = await getDoc(subCatRef);
+        const subCatData = subCatSnap.data() as any;
+
+        // Get the category reference from subcategory
+        if (subCatData?.service_subCategory) {
+          const categoryRef = subCatData.service_subCategory;
+          const categorySnap = await getDoc(categoryRef);
+          const categoryData = categorySnap.data() as any;
+          
+          // Get the category name from Service_Categories document
+          const categoryName = categoryData?.name;
+
+          // Map category name to our predefined categories
+          if (categoryName) {
+            const lowerCategoryName = categoryName.toLowerCase();
+            if (lowerCategoryName.includes("cleaning") || lowerCategoryName.includes("Clean")) {
+              categoryCount.Cleaning++;
+            } else if (lowerCategoryName.includes("electrical") || lowerCategoryName.includes("elec")) {
+              categoryCount.Electrical++;
+            } else if (lowerCategoryName.includes("security")) {
+              categoryCount.Security++;
+            } else if (lowerCategoryName.includes("driver")) {
+              categoryCount.Driver++;
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching category for booking:", error);
+      }
+    }
+  }
+
+  return categoryCount;
 }

@@ -8,7 +8,7 @@ import {
     Timestamp
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
-import { getProviderRefs } from "@/lib/queries/partners";
+import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
 
 
 export type BookingStats = {
@@ -27,21 +27,7 @@ export type BookingStats = {
 export async function fetchBookingStats(fromDate?: string, toDate?: string): Promise<BookingStats> {
     const db = getFirestoreDb()
 
-    const customerIds = [
-        "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-        "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-        "VxxapfO7l8YM5f6xmFqpThc17eD3",
-        "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
-        "7KlujhUyJbeCTPG6Pty8exlxXuM2",
-        "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
-        "MstGdrDCHkZ1KKf0xtZctauIovf2",
-        "OgioZJvg0DWWRnqZLj2AUMUljZN2",
-        "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
-        "uSZdJdat03froahSdGmPpFWDGhi2",
-
-    ]
-
-    const customerRefs = customerIds.map(id => doc(db, "customer", id))
+    const customerRefs = PROVIDER_ID_LIST.map(id => doc(db, "customer", id))
     const bookingsCol = collection(db, "bookings")
     const reviewsCol = collection(db, "reviews")
 
