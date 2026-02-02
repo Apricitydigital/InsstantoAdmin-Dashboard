@@ -9,12 +9,17 @@ import {
   doc as docRef,
   DocumentReference,
 } from "firebase/firestore";
+import Papa from "papaparse";
 import { getFirestoreDb } from "@/lib/firebase";
 import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
 
+/* ------------------------------------------------------------------ */
+/* TYPES */
+/* ------------------------------------------------------------------ */
+
 export type MonthlyCACPoint = {
-  key: string; // YYYY-MM (for sorting)
-  monthLabel: string; // e.g. "Jan 2026"
+  key: string; // YYYY-MM
+  monthLabel: string; // "Jan 2026"
   marketingExpense: number;
   customersWithOneBooking: number;
   cac: number;
@@ -22,9 +27,9 @@ export type MonthlyCACPoint = {
   changeDir?: "up" | "down" | "flat";
 };
 
-/* ------------------------------
-   HELPERS
------------------------------- */
+/* ------------------------------------------------------------------ */
+/* HELPERS */
+/* ------------------------------------------------------------------ */
 
 function monthKey(d: Date) {
   const y = d.getFullYear();
@@ -33,11 +38,7 @@ function monthKey(d: Date) {
 }
 
 function monthLabel(d: Date) {
-  return d.toLocaleString("en-US", { month: "short", year: "numeric" }); // "Jan 2026"
-}
-
-function clampDate(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds());
+  return d.toLocaleString("en-US", { month: "short", year: "numeric" });
 }
 
 function startOfMonth(d: Date) {
@@ -58,33 +59,43 @@ function percentChange(current: number, previous: number) {
 }
 
 /**
- * Robust-ish parsing for Google Sheet month labels.
- * Supports values like:
- * - "Jan", "January"
- * - "Jan 2026", "January 2026"
- * - "2026-01" (best)
+ * ✅ Supports:
+ * - "January 26"
+ * - "Jan 26"
+ * - "January 2026"
+ * - "Jan 2026"
+ * - "2026-01"
  */
 function parseSheetMonthToKey(raw: string, fallbackYear: number): string | null {
   const s = (raw || "").trim();
   if (!s) return null;
 
-  // If it's already YYYY-MM
+  // YYYY-MM
   if (/^\d{4}-\d{2}$/.test(s)) return s;
 
-  // Try "Mon YYYY" / "Month YYYY"
-  const try1 = new Date(`${s} 1`);
-  if (!isNaN(try1.getTime())) return monthKey(try1);
+  // Month YY  → January 26
+  const m = s.match(/^([A-Za-z]+)\s+(\d{2})$/);
+  if (m) {
+    const monthName = m[1];
+    const yy = Number(m[2]);
+    const fullYear = yy < 50 ? 2000 + yy : 1900 + yy;
+    const d = new Date(`${monthName} 1, ${fullYear}`);
+    if (!isNaN(d.getTime())) return monthKey(d);
+  }
 
-  // Try "Mon" (no year) -> use fallbackYear
-  const try2 = new Date(`${s} 1, ${fallbackYear}`);
-  if (!isNaN(try2.getTime())) return monthKey(try2);
+  // Month YYYY
+  const d1 = new Date(`${s} 1`);
+  if (!isNaN(d1.getTime())) return monthKey(d1);
+
+  // Month only
+  const d2 = new Date(`${s} 1, ${fallbackYear}`);
+  if (!isNaN(d2.getTime())) return monthKey(d2);
 
   return null;
 }
 
 /**
- * If your date range starts/ends mid-month, we prorate that month’s expense by overlap days.
- * If full month, it will effectively be the full monthly expense.
+ * Prorate expense if date range overlaps partially with a month
  */
 function prorateMonthlyExpenseForRange(
   fullMonthTotal: number,
@@ -108,65 +119,81 @@ function prorateMonthlyExpenseForRange(
   return overlapDays * daily;
 }
 
-/* ------------------------------
-   MAIN: MONTHLY CAC POINTS
------------------------------- */
-export async function fetchCACMonthlyPoints(fromDate?: string, toDate?: string): Promise<MonthlyCACPoint[]> {
+/* ------------------------------------------------------------------ */
+/* MAIN */
+/* ------------------------------------------------------------------ */
+
+export async function fetchCACMonthlyPoints(
+  fromDate?: string,
+  toDate?: string
+): Promise<MonthlyCACPoint[]> {
   const db = getFirestoreDb();
   const now = new Date();
 
-  // Default: last 6 months if no range (feel free to change)
-  const defaultTo = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  const defaultFrom = new Date(now.getFullYear(), now.getMonth() - 5, 1, 0, 0, 0);
+  const to = toDate
+    ? new Date(toDate + "T23:59:59")
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
-  const from = clampDate(fromDate ? new Date(fromDate + "T00:00:00") : defaultFrom);
-  const to = clampDate(toDate ? new Date(toDate + "T23:59:59") : defaultTo);
+  const from = fromDate
+    ? new Date(fromDate + "T00:00:00")
+    : new Date(now.getFullYear(), now.getMonth() - 5, 1, 0, 0, 0);
 
   const fromTS = Timestamp.fromDate(from);
   const toTS = Timestamp.fromDate(to);
 
-  // Provider filter (using first 8 providers)
-  const providerIds = PROVIDER_ID_LIST.slice(0, 8);
-  const providerRefs = providerIds.map((id) => docRef(db, "customer", id));
+  /* ------------------------------
+     1️⃣ EXPENSE SHEET (SAFE)
+  ------------------------------ */
 
-  // 1) Pull marketing monthly totals from Google Sheet
-  const sheetUrl =
+  const SHEET_URL =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vSzu4Xj2cluOSQ7-eT9VNvEkZu_3ghcImdSWYTWq2181-0M7OV16a2GN70WcC7DnagsrkZFfDeJioJo/pub?output=csv";
 
-  const sheetRes = await fetch(sheetUrl);
+  const sheetRes = await fetch(SHEET_URL);
   const sheetText = await sheetRes.text();
 
-  const rows = sheetText
-    .trim()
-    .split("\n")
-    .map((r) => r.split(",").map((c) => c.trim()));
+  const parsed = Papa.parse<Record<string, string>>(sheetText, {
+    header: true,
+    skipEmptyLines: true,
+  });
 
-  const header = rows[0] ?? [];
-  const monthIdx = header.findIndex((h) => h.toLowerCase().includes("month"));
-  const totalIdx = header.findIndex((h) => h.toLowerCase().includes("total"));
-
+  const rows = parsed.data;
   const expenseByMonthKey: Record<string, number> = {};
 
-  if (monthIdx >= 0 && totalIdx >= 0) {
-    for (const r of rows.slice(1)) {
-      const rawMonth = r[monthIdx] ?? "";
-      const total = parseFloat(r[totalIdx] ?? "0") || 0;
-      if (!rawMonth || total <= 0) continue;
+  if (rows.length > 0) {
+    const columns = Object.keys(rows[0]);
+    const monthCol = columns.find(c => c.toLowerCase().includes("month"));
+    const totalCol = columns.find(c => c.toLowerCase().includes("total"));
 
-      // Try parse with "rawMonth" using its own year, else fallback to from.getFullYear()
-      const k = parseSheetMonthToKey(rawMonth, from.getFullYear());
-      if (!k) continue;
+    if (monthCol && totalCol) {
+      for (const r of rows) {
+        const rawMonth = r[monthCol];
+        const rawTotal = r[totalCol];
 
-      expenseByMonthKey[k] = (expenseByMonthKey[k] || 0) + total;
+        if (!rawMonth || !rawTotal) continue;
+
+        const total = parseFloat(rawTotal.replace(/,/g, "")) || 0;
+        if (total <= 0) continue;
+
+        const key = parseSheetMonthToKey(rawMonth, from.getFullYear());
+        if (!key) continue;
+
+        expenseByMonthKey[key] =
+          (expenseByMonthKey[key] || 0) + total;
+      }
     }
   }
 
-  // 2) Fetch ALL completed bookings once for the range, then group by month
-  const bookingsCol = collection(db, "bookings");
+  /* ------------------------------
+     2️⃣ BOOKINGS (FIRESTORE)
+  ------------------------------ */
+
+  const providerRefs = PROVIDER_ID_LIST.slice(0, 8).map(id =>
+    docRef(db, "customer", id)
+  );
 
   const completedSnap = await getDocs(
     query(
-      bookingsCol,
+      collection(db, "bookings"),
       where("provider_id", "in", providerRefs),
       where("status", "==", "Service_Completed"),
       where("date", ">=", fromTS),
@@ -174,27 +201,26 @@ export async function fetchCACMonthlyPoints(fromDate?: string, toDate?: string):
     )
   );
 
-  // monthKey -> customerId -> count
   const countsByMonth: Record<string, Record<string, number>> = {};
 
-  completedSnap.forEach((docSnap) => {
+  completedSnap.forEach(docSnap => {
     const d = docSnap.data() as {
       date?: Timestamp;
-      customer_id?: DocumentReference | null;
+      customer_id?: DocumentReference;
     };
 
-    const ts = d.date;
-    const custRef = d.customer_id as DocumentReference | null | undefined;
+    if (!d.date || !d.customer_id?.id) return;
 
-    if (!ts || !custRef?.id) return;
-
-    const dt = ts.toDate();
-    const mk = monthKey(dt);
+    const mk = monthKey(d.date.toDate());
     countsByMonth[mk] ||= {};
-    countsByMonth[mk][custRef.id] = (countsByMonth[mk][custRef.id] || 0) + 1;
+    countsByMonth[mk][d.customer_id.id] =
+      (countsByMonth[mk][d.customer_id.id] || 0) + 1;
   });
 
-  // 3) Build month buckets from from..to
+  /* ------------------------------
+     3️⃣ BUILD MONTH POINTS
+  ------------------------------ */
+
   const points: MonthlyCACPoint[] = [];
   let cursor = startOfMonth(from);
 
@@ -203,45 +229,43 @@ export async function fetchCACMonthlyPoints(fromDate?: string, toDate?: string):
     const mStart = startOfMonth(cursor);
     const mEnd = endOfMonth(cursor);
 
-    // marketing expense for this month (from sheet), prorated if partial overlap
-    const fullMonthTotal = expenseByMonthKey[mk] || 0;
-    const marketingExpense = fullMonthTotal
-      ? prorateMonthlyExpenseForRange(fullMonthTotal, mStart, mEnd, from, to)
+    const fullMonthExpense = expenseByMonthKey[mk] || 0;
+    const marketingExpense = fullMonthExpense
+      ? prorateMonthlyExpenseForRange(fullMonthExpense, mStart, mEnd, from, to)
       : 0;
 
-    // customers with exactly one completed booking in this month (within overall range)
     const perCustomer = countsByMonth[mk] || {};
-    let customersWithOneBooking = 0;
-    for (const cnt of Object.values(perCustomer)) {
-      if (cnt === 1) customersWithOneBooking++;
-    }
+    const customersWithOneBooking = Object.values(perCustomer).filter(c => c === 1).length;
 
-    const cac = customersWithOneBooking > 0 ? marketingExpense / customersWithOneBooking : 0;
+    const cac =
+      customersWithOneBooking > 0
+        ? marketingExpense / customersWithOneBooking
+        : 0;
 
     points.push({
       key: mk,
       monthLabel: monthLabel(cursor),
-      marketingExpense: Number(marketingExpense.toFixed(2)),
+      marketingExpense: +marketingExpense.toFixed(2),
       customersWithOneBooking,
-      cac: Number(cac.toFixed(2)),
+      cac: +cac.toFixed(2),
     });
 
-    // next month
     cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
   }
 
-  // 4) Month-over-month change
+  /* ------------------------------
+     4️⃣ MoM CHANGE
+  ------------------------------ */
+
   for (let i = 0; i < points.length; i++) {
     if (i === 0) {
       points[i].changePct = null;
       points[i].changeDir = "flat";
-      continue;
+    } else {
+      const pct = percentChange(points[i].cac, points[i - 1].cac);
+      points[i].changePct = +pct.toFixed(1);
+      points[i].changeDir = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
     }
-    const prev = points[i - 1].cac;
-    const cur = points[i].cac;
-    const pct = percentChange(cur, prev);
-    points[i].changePct = Number(pct.toFixed(1));
-    points[i].changeDir = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
   }
 
   return points;

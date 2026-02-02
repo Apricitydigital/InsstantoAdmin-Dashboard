@@ -12,6 +12,8 @@ import {
 } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
 import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
+import Papa from "papaparse";
+
 
 export type BookingStats = {
   totalBookings: number;
@@ -38,12 +40,85 @@ export type BookingStats = {
   netPnL: number;
 };
 
+
 /* ------------------------------
    % CHANGE HELPER
 ------------------------------ */
 function percentChange(current: number, previous: number) {
   if (previous === 0) return current > 0 ? 100 : 0;
   return ((current - previous) / previous) * 100;
+}
+
+function monthKey(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+function parseSheetMonthToKey(raw: string, fallbackYear: number): string | null {
+  const s = (raw || "").trim();
+  if (!s) return null;
+
+  // YYYY-MM
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+
+  // Month YY → January 26
+  const m = s.match(/^([A-Za-z]+)\s+(\d{2})$/);
+  if (m) {
+    const yy = Number(m[2]);
+    const year = yy < 50 ? 2000 + yy : 1900 + yy;
+    const d = new Date(`${m[1]} 1, ${year}`);
+    if (!isNaN(d.getTime())) return monthKey(d);
+  }
+
+  // Month YYYY
+  const d1 = new Date(`${s} 1`);
+  if (!isNaN(d1.getTime())) return monthKey(d1);
+
+  // Month only
+  const d2 = new Date(`${s} 1, ${fallbackYear}`);
+  if (!isNaN(d2.getTime())) return monthKey(d2);
+
+  return null;
+}
+
+function daysInMonth(y: number, m0: number) {
+  return new Date(y, m0 + 1, 0).getDate();
+}
+
+function prorateByMonthKey(
+  expenseByMonth: Record<string, number>,
+  from: Date,
+  to: Date
+) {
+  let total = 0;
+  let cursor = new Date(from.getFullYear(), from.getMonth(), 1);
+
+  while (cursor <= to) {
+    const key = monthKey(cursor);
+    const fullMonthExpense = expenseByMonth[key] || 0;
+
+    if (fullMonthExpense > 0) {
+      const mStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      const mEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59);
+
+      const overlapStart = from > mStart ? from : mStart;
+      const overlapEnd = to < mEnd ? to : mEnd;
+
+      if (overlapStart <= overlapEnd) {
+        const dim = daysInMonth(cursor.getFullYear(), cursor.getMonth());
+        const daily = fullMonthExpense / dim;
+        const overlapDays =
+          Math.floor((overlapEnd.getTime() - overlapStart.getTime()) / 86400000) + 1;
+
+        total += overlapDays * daily;
+      }
+    }
+
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+
+  return total;
 }
 
 /* ------------------------------
@@ -236,38 +311,53 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
   /* ------------------------------
      MARKETING EXPENSE — GOOGLE SHEET
   ------------------------------ */
-  const sheetUrl =
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSzu4Xj2cluOSQ7-eT9VNvEkZu_3ghcImdSWYTWq2181-0M7OV16a2GN70WcC7DnagsrkZFfDeJioJo/pub?output=csv";
+const sheetUrl =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSzu4Xj2cluOSQ7-eT9VNvEkZu_3ghcImdSWYTWq2181-0M7OV16a2GN70WcC7DnagsrkZFfDeJioJo/pub?output=csv";
 
-  const sheetRes = await fetch(sheetUrl);
-  const sheetData = await sheetRes.text();
+const sheetRes = await fetch(sheetUrl);
+const sheetText = await sheetRes.text();
 
-  const rows = sheetData
-    .trim()
-    .split("\n")
-    .map((r) => r.split(","));
+const parsed = Papa.parse<Record<string, string>>(sheetText, {
+  header: true,
+  skipEmptyLines: true,
+});
 
-  const header = rows[0] ?? [];
-  const monthIdx = header.findIndex((h) => h.toLowerCase().includes("month"));
-  const totalIdx = header.findIndex((h) => h.toLowerCase().includes("total"));
+const rows = parsed.data;
+const expenseByMonthKey: Record<string, number> = {};
 
-  const monthlyExpenses =
-    monthIdx >= 0 && totalIdx >= 0
-      ? rows
-          .slice(1)
-          .map((r) => ({
-            month: r[monthIdx],
-            total: parseFloat(r[totalIdx]) || 0,
-          }))
-          .filter((m) => m.month && m.total > 0)
-      : [];
+if (rows.length > 0) {
+  const columns = Object.keys(rows[0]);
+  const monthCol = columns.find(c => c.toLowerCase().includes("month"));
+  const totalCol = columns.find(c => c.toLowerCase().includes("total"));
+
+  if (monthCol && totalCol) {
+    for (const r of rows) {
+      const rawMonth = r[monthCol];
+      const rawTotal = r[totalCol];
+      if (!rawMonth || !rawTotal) continue;
+
+      const total = parseFloat(rawTotal.replace(/,/g, "")) || 0;
+      if (total <= 0) continue;
+
+      const key = parseSheetMonthToKey(rawMonth, from.getFullYear());
+      if (!key) continue;
+
+      expenseByMonthKey[key] =
+        (expenseByMonthKey[key] || 0) + total;
+    }
+  }
+}
+
 
   /* ------------------------------
      CAC — PRORATED MARKETING EXPENSE
   ------------------------------ */
-  const cacExpense = proratedExpense(monthlyExpenses, from, to, from.getFullYear());
+const cacExpense = prorateByMonthKey(expenseByMonthKey, from, to);
+const cac = customersWithOneBooking > 0 ? cacExpense / customersWithOneBooking : 0;
 
-  const cac = customersWithOneBooking > 0 ? cacExpense / customersWithOneBooking : 0;
+const totalExpensePNL = prorateByMonthKey(expenseByMonthKey, from, to);
+const netPnL = netRevenue - totalExpensePNL;
+
 
   /* ------------------------------
      CAC CHANGE (PREVIOUS RANGE)
@@ -299,13 +389,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
   const prevCustomersWithOneBooking =
     countCustomersWithExactlyOneCompletedBookingInSnap(prevCompletedDocs);
 
-  const prevCACExpense = proratedExpense(
-    monthlyExpenses,
-    prevFrom,
-    prevTo,
-    prevFrom.getFullYear()
-  );
-
+  const prevCACExpense = prorateByMonthKey(expenseByMonthKey, prevFrom, prevTo);
   const prevCAC =
     prevCustomersWithOneBooking > 0 ? prevCACExpense / prevCustomersWithOneBooking : 0;
 
@@ -314,8 +398,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
   /* ------------------------------
      NET PNL (DAILY PRORATED)
   ------------------------------ */
-  const totalExpensePNL = proratedExpense(monthlyExpenses, from, to, from.getFullYear());
-  const netPnL = netRevenue - totalExpensePNL;
+
 
   /* ------------------------------
      FINAL RETURN OBJECT

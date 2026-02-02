@@ -8,6 +8,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
+import Papa from "papaparse";
 
 /* ------------------------------------------------------------------ */
 /* TYPES */
@@ -35,41 +36,54 @@ export type DailyOverview = {
 const SHEET_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vSzu4Xj2cluOSQ7-eT9VNvEkZu_3ghcImdSWYTWq2181-0M7OV16a2GN70WcC7DnagsrkZFfDeJioJo/pub?output=csv";
 
+
 async function fetchAverageExpenseFromSheet(): Promise<number> {
   try {
     const res = await fetch(SHEET_URL);
     const text = await res.text();
 
-    const rows = text.trim().split("\n").map((r) => r.split(","));
-    const header = rows[0];
-    const monthIndex = header.findIndex((c) =>
-      c.toLowerCase().includes("month")
-    );
-    const totalIndex = header.findIndex((c) =>
-      c.toLowerCase().includes("total")
-    );
+    const parsed = Papa.parse<Record<string, string>>(text, {
+      header: true,
+      skipEmptyLines: true,
+    });
 
-    const dataRows = rows.slice(1).filter(
-      (r) => r[monthIndex] && r[totalIndex]
-    );
-    if (dataRows.length === 0) return 0;
+    const rows = parsed.data;
+    if (!rows.length) return 0;
 
-    const lastRow = dataRows[dataRows.length - 1];
-    const totalExpense = parseFloat(lastRow[totalIndex]) || 0;
+    const columns = Object.keys(rows[0]);
+    const monthColumn = columns.find(c => c.toLowerCase().includes("month"));
+    const totalColumn = columns.find(c => c.toLowerCase().includes("total"));
 
-    const currentMonth = new Date().getMonth();
-    const daysInMonth = new Date(
-      new Date().getFullYear(),
-      currentMonth + 1,
-      0
-    ).getDate();
+    if (!monthColumn || !totalColumn) return 0;
 
-    return totalExpense / daysInMonth;
+    const validRows = rows.filter(r => r[monthColumn] && r[totalColumn]);
+    if (!validRows.length) return 0;
+
+    const lastRow = validRows[validRows.length - 1];
+
+    const totalExpense =
+      parseFloat(lastRow[totalColumn].replace(/,/g, "")) || 0;
+
+    // 🧠 Parse month from sheet (e.g. "January 26")
+    const [monthName] = lastRow[monthColumn].split(" ");
+    const monthIndex = new Date(`${monthName} 1, ${new Date().getFullYear()}`).getMonth();
+
+    const today = new Date();
+    const isCurrentMonth = today.getMonth() === monthIndex;
+
+    const daysElapsed = isCurrentMonth
+      ? today.getDate()
+      : new Date(today.getFullYear(), monthIndex + 1, 0).getDate();
+
+    if (daysElapsed === 0) return 0;
+
+    return Math.round(totalExpense / daysElapsed);
   } catch (err) {
     console.error("Error fetching expense sheet:", err);
     return 0;
   }
 }
+
 
 /* ------------------------------------------------------------------ */
 /* MAIN FUNCTION */
