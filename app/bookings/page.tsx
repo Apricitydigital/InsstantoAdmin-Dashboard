@@ -11,19 +11,23 @@ import { BookingTable } from "@/components/bookings/booking-table";
 import SheetBookingStats from "@/components/bookings/sheet-booking-stats";
 import { SheetBookingTable } from "@/components/bookings/sheet-booking-table";
 
+import CartStats from "@/components/cart/cart-stats";
+import { CartTable } from "@/components/cart/cart-table";
+
 function formatDateInput(d: Date) {
   return d.toLocaleDateString("en-CA"); // YYYY-MM-DD
 }
 
 export default function BookingsPage() {
-  // Default range: April 1, 2025 → Today
   const today = new Date();
   const defaultStart = new Date(2025, 3, 1);
   const defaultEnd = today;
 
   const [fromDate, setFromDate] = useState(formatDateInput(defaultStart));
   const [toDate, setToDate] = useState(formatDateInput(defaultEnd));
-  const [activeTab, setActiveTab] = useState<"backend" | "sheet">("backend");
+  const [activeTab, setActiveTab] = useState<
+    "backend" | "sheet" | "cart"
+  >("backend");
 
   const clearFilter = () => {
     setFromDate(formatDateInput(defaultStart));
@@ -39,7 +43,6 @@ export default function BookingsPage() {
           <AdminHeader title="Booking & Scheduling" />
 
           <main className="flex-1 space-y-4 p-4 md:p-6">
-
             {/* ---------- Date Range Filter ---------- */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white p-4 rounded-lg border">
               <p className="text-muted-foreground text-sm font-medium">
@@ -97,6 +100,17 @@ export default function BookingsPage() {
               >
                 Sheet Bookings
               </button>
+
+              <button
+                onClick={() => setActiveTab("cart")}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
+                  activeTab === "cart"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Cart Services
+              </button>
             </div>
 
             {/* ---------- Tab Content ---------- */}
@@ -105,13 +119,17 @@ export default function BookingsPage() {
                 <BookingStats fromDate={fromDate} toDate={toDate} />
                 <BookingTable fromDate={fromDate} toDate={toDate} />
               </>
-            ) : (
+            ) : activeTab === "sheet" ? (
               <>
                 <SheetBookingStats fromDate={fromDate} toDate={toDate} />
                 <SheetBookingTable fromDate={fromDate} toDate={toDate} />
               </>
+            ) : (
+              <>
+                <CartStats fromDate={fromDate} toDate={toDate} />
+                <CartTable fromDate={fromDate} toDate={toDate} />
+              </>
             )}
-
           </main>
         </div>
       </div>
