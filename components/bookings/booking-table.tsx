@@ -65,86 +65,64 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const [selectedBooking, setSelectedBooking] = useState<BookingDoc | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
-  // ---------- Fetch bookings within date range ----------
-  useEffect(() => {
-    const fetchAllData = async () => {
-      setLoading(true)
-      setError("")
+useEffect(() => {
+  setLoading(true)
+  setError("")
+
+  const bookingsQuery = query(collection(db, "bookings")) // NO where, NO orderBy => no index needed
+
+  const unsub = onSnapshot(
+    bookingsQuery,
+    async (snapshot) => {
       try {
-        // Convert date strings to Firestore Timestamps
-        const startDate = fromDate ? new Date(fromDate + "T00:00:00Z") : new Date(2025, 3, 1);
-        const endDate = toDate ? new Date(toDate + "T23:59:59Z") : new Date();
-
-        const fromTimestamp = Timestamp.fromDate(startDate);
-        const toTimestamp = Timestamp.fromDate(endDate);
-
-        // Query bookings within date range
-        const allBookingsQuery = query(
-          collection(db, "bookings"),
-          where("date", ">=", fromTimestamp),
-          where("date", "<=", toTimestamp),
-          orderBy("date", "desc")
-        )
-
-        const snapshot = await getDocs(allBookingsQuery)
-
-        const docs: BookingDoc[] = snapshot.docs.map(d => ({
+        const docs: BookingDoc[] = snapshot.docs.map((d) => ({
           id: d.id,
           ...(d.data() as any),
         }))
 
-        setAllBookings(docs)
-        await hydrateParties(docs)
-        await fetchServicesInfo(docs)
-      } catch (e: any) {
-        console.error("Failed to load bookings:", e)
-        setError(e.message ?? "Failed to load bookings.")
-      } finally {
+        const startDate = fromDate
+          ? new Date(fromDate + "T00:00:00")
+          : new Date(2025, 3, 1)
+
+        const endDate = toDate
+          ? new Date(toDate + "T23:59:59")
+          : new Date()
+
+        // Local filter by date
+        const filteredDocs = docs
+          .filter((b) => {
+            const d = b.date?.toDate?.()
+            if (!d) return false
+            return d >= startDate && d <= endDate
+          })
+          .sort((a, b) => {
+            const da = a.date?.toDate?.() || new Date(0)
+            const dbb = b.date?.toDate?.() || new Date(0)
+            return dbb.getTime() - da.getTime()
+          })
+
+        setAllBookings(filteredDocs)
+
+        await hydrateParties(filteredDocs)
+        await fetchServicesInfo(filteredDocs)
+
+        setLoading(false)
+      } catch (err: any) {
+        console.error("Realtime booking error:", err)
+        setError(err?.message || "Realtime update failed.")
         setLoading(false)
       }
+    },
+    (err) => {
+      console.error("Booking listener failed:", err)
+      setError(err?.message || "Realtime listener failed.")
+      setLoading(false)
     }
+  )
 
-    fetchAllData()
-  }, [db, fromDate, toDate])
+  return () => unsub()
+}, [db, fromDate, toDate])
 
-  // ---------- Real-time updates ----------
-  useEffect(() => {
-    if (allBookings.length === 0) return
-
-    const realtimeQuery = query(collection(db, "bookings"), orderBy("date", "desc"), limit(5))
-    const unsub = onSnapshot(realtimeQuery, async (snapshot) => {
-      const newDocs: BookingDoc[] = []
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "added") {
-          const docData = { id: change.doc.id, ...(change.doc.data() as any) }
-
-          // Check if booking falls within date range
-          const bookingDate = docData.date?.toDate();
-          const startDate = new Date(fromDate + "T00:00:00Z");
-          const endDate = new Date(toDate + "T23:59:59Z");
-
-          if (bookingDate && bookingDate >= startDate && bookingDate <= endDate) {
-            if (!allBookings.some(b => b.id === docData.id)) {
-              newDocs.push(docData)
-            }
-          }
-        }
-      })
-      if (newDocs.length > 0) {
-        setAllBookings((prev) => {
-          const combined = [...newDocs, ...prev]
-          return combined.sort((a, b) => {
-            const dateA = a.date?.toDate?.() || new Date(0)
-            const dateB = b.date?.toDate?.() || new Date(0)
-            return dateB.getTime() - dateA.getTime()
-          })
-        })
-        await hydrateParties(newDocs)
-        await fetchServicesInfo(newDocs)
-      }
-    })
-    return () => unsub()
-  }, [db, fromDate, toDate, allBookings.length])
 
   // ---------- Fetch customer/provider details ----------
   const hydrateParties = async (docs: BookingDoc[]) => {

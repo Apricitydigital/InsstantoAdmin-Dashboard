@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   collection,
   getDocs,
+  onSnapshot,
   query,
   where,
   Timestamp,
@@ -79,6 +80,7 @@ type Partner = {
   joinDate: string
   status: string
   serviceOptName: string | null
+  partner_serviceOpt?: string | null
 }
 
 interface PartnerTableProps {
@@ -100,7 +102,11 @@ const chunkArray = <T,>(arr: T[], size = 10) =>
 /* ------------------------------------------------------------------ */
 
 export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
+  const db = getFirestoreDb()
+
   const [partners, setPartners] = useState<Partner[]>([])
+  const [serviceMap, setServiceMap] = useState<Record<string, string>>({})
+
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] =
     useState<"all" | "provider" | "agency">("all")
@@ -109,44 +115,49 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
   const [statusFilter, setStatusFilter] =
     useState<StatusFilter>("All")
 
-  /* ---------------- FETCH ---------------- */
+  const [loading, setLoading] = useState(false)
+
+  /* ---------------- DATE RANGE ---------------- */
+
+  const startDate = new Date(fromDate)
+  const endDate = new Date(toDate)
+  endDate.setHours(23, 59, 59, 999)
+
+  /* ------------------------------------------------------------------ */
+  /* REALTIME LISTENER (providers + agencies) */
+  /* ------------------------------------------------------------------ */
 
   useEffect(() => {
-    const fetchPartners = async () => {
-      const db = getFirestoreDb()
+    setLoading(true)
 
-      const providerQuery = query(
-        collection(db, "customer"),
-        where("userType.provider", "==", true)
-      )
+    const providerQuery = query(
+      collection(db, "customer"),
+      where("userType.provider", "==", true)
+    )
 
-      const agencyQuery = query(
-        collection(db, "customer"),
-        where("userType.AgencyPartner", "==", true)
-      )
+    const agencyQuery = query(
+      collection(db, "customer"),
+      where("userType.AgencyPartner", "==", true)
+    )
 
-      const [providerSnap, agencySnap] = await Promise.all([
-        getDocs(providerQuery),
-        getDocs(agencyQuery),
-      ])
+    let providers: any[] = []
+    let agencies: any[] = []
 
-      const allDocs = [...providerSnap.docs, ...agencySnap.docs]
+    const rebuildPartners = async () => {
+      const allDocs = [...providers, ...agencies]
 
-      /* ---- collect service_subcategory ids ---- */
+      // Collect service ids
       const serviceIds = Array.from(
-        new Set(
-          allDocs
-            .map((d) => d.data().partner_serviceOpt)
-            .filter(Boolean)
-        )
-      )
+        new Set(allDocs.map((d) => d.data()?.partner_serviceOpt).filter(Boolean))
+      ) as string[]
 
-      /* ---- fetch service_subcategories ---- */
-      const serviceMap: Record<string, string> = {}
+      // Fetch service_subcategories names (getDocs is OK here)
+      const newServiceMap: Record<string, string> = {}
       const chunks = chunkArray(serviceIds)
 
       await Promise.all(
         chunks.map(async (ids) => {
+          if (ids.length === 0) return
           const snap = await getDocs(
             query(
               collection(db, "service_subcategories"),
@@ -154,15 +165,17 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
             )
           )
           snap.forEach((doc) => {
-            serviceMap[doc.id] = doc.data().name
+            newServiceMap[doc.id] = (doc.data() as any)?.name
           })
         })
       )
 
-      const data: Partner[] = allDocs.map((doc) => {
-        const d = doc.data()
+      setServiceMap(newServiceMap)
+
+      const data: Partner[] = allDocs.map((docSnap) => {
+        const d = docSnap.data()
         return {
-          id: doc.id,
+          id: docSnap.id,
           display_name: d.display_name || "Unknown",
           phone_number: d.phone_number || "N/A",
           type: d.userType?.AgencyPartner ? "agency" : "provider",
@@ -171,29 +184,37 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
               ? d.created_time.toDate().toISOString()
               : new Date(0).toISOString(),
           status: d.partner_status || "Information_Unverified",
+          partner_serviceOpt: d.partner_serviceOpt || null,
           serviceOptName: d.partner_serviceOpt
-            ? serviceMap[d.partner_serviceOpt] || "Unknown"
+            ? newServiceMap[d.partner_serviceOpt] || "Unknown"
             : null,
         }
       })
 
       data.sort(
         (a, b) =>
-          new Date(b.joinDate).getTime() -
-          new Date(a.joinDate).getTime()
+          new Date(b.joinDate).getTime() - new Date(a.joinDate).getTime()
       )
 
       setPartners(data)
+      setLoading(false)
     }
 
-    fetchPartners()
-  }, [])
+    const unsubProvider = onSnapshot(providerQuery, (snap) => {
+      providers = snap.docs
+      rebuildPartners()
+    })
 
-  /* ---------------- DATE RANGE ---------------- */
+    const unsubAgency = onSnapshot(agencyQuery, (snap) => {
+      agencies = snap.docs
+      rebuildPartners()
+    })
 
-  const startDate = new Date(fromDate)
-  const endDate = new Date(toDate)
-  endDate.setHours(23, 59, 59, 999)
+    return () => {
+      unsubProvider()
+      unsubAgency()
+    }
+  }, [db])
 
   /* ---------------- FILTERING ---------------- */
 
@@ -201,15 +222,12 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
     return partners.filter((p) => {
       const joined = new Date(p.joinDate)
 
-      const matchesDate =
-        joined >= startDate && joined <= endDate
+      const matchesDate = joined >= startDate && joined <= endDate
 
       const matchesSearch =
-        p.display_name
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
+        p.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.phone_number.includes(searchTerm) ||
-        p.serviceOptName?.toLowerCase().includes(searchTerm.toLowerCase() )
+        p.serviceOptName?.toLowerCase().includes(searchTerm.toLowerCase())
 
       const matchesType =
         typeFilter === "all" ||
@@ -290,6 +308,7 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
             <CardTitle>Partner Management</CardTitle>
             <CardDescription>
               Showing {filteredPartners.length} partners
+              {loading && <span className="ml-2 text-xs">(loading...)</span>}
             </CardDescription>
           </div>
 

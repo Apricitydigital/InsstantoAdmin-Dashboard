@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   collection,
-  getDocs,
+  onSnapshot,
   query,
   DocumentReference,
   DocumentData,
@@ -41,19 +41,13 @@ const PAGE_SIZE = 20
 // ---------- Types ----------
 type CartDoc = {
   id: string
-
-  // Can be DocumentReference OR string UID in your DB
   customer_id?: DocumentReference<DocumentData> | string | null
-
   service_name?: string
   quantity?: number
   item_price?: number
   subTotal?: number
   cartStatus?: string
-
-  // Using date field now
   date?: any
-
   service_duration?: string
   service_credits?: number
 }
@@ -81,20 +75,12 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
 
   const safeToDate = (v: any): Date | null => {
     try {
-      // Firestore Timestamp
-      if (v && typeof v === "object" && typeof v.toDate === "function") {
-        return v.toDate()
-      }
-
-      // Already a JS Date
+      if (v && typeof v === "object" && typeof v.toDate === "function") return v.toDate()
       if (v instanceof Date) return v
-
-      // ISO string date
       if (typeof v === "string") {
         const d = new Date(v)
         if (!isNaN(d.getTime())) return d
       }
-
       return null
     } catch {
       return null
@@ -115,17 +101,8 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
 
       docs.forEach((d) => {
         const v: any = d.customer_id
-
-        // Case 1: DocumentReference
-        if (v && typeof v === "object" && "path" in v) {
-          refs.push(v as DocumentReference<DocumentData>)
-          return
-        }
-
-        // Case 2: UID string
-        if (typeof v === "string" && v.length > 5) {
-          uidStrings.push(v)
-        }
+        if (v && typeof v === "object" && "path" in v) refs.push(v as DocumentReference<DocumentData>)
+        if (typeof v === "string" && v.length > 5) uidStrings.push(v)
       })
 
       const uniqueRefs = Array.from(new Map(refs.map((r) => [r.path, r])).values())
@@ -141,11 +118,10 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
         })
       )
 
-      // ⚠️ Assumes customers collection is "customers"
       const uidSnaps = await Promise.all(
         uniqueUids.map(async (uid) => {
           try {
-            const ref = doc(db, "customers", uid)
+            const ref = doc(db, "customers", uid) // adjust if needed
             return await getDoc(ref)
           } catch {
             return null
@@ -183,54 +159,62 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
     }
   }
 
-  // ---------- Fetch cart (NO index query) ----------
+  // ---------- REALTIME LISTENER (NO index required) ----------
   useEffect(() => {
-    const fetchCart = async () => {
-      setLoading(true)
-      setError("")
+    setLoading(true)
+    setError("")
 
-      try {
-        // NO where, NO orderBy => NO index required
-        const cartQuery = query(collection(db, "cart"))
-        const snapshot = await getDocs(cartQuery)
+    const cartQuery = query(collection(db, "cart"))
 
-        const docs: CartDoc[] = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as any),
-        }))
+    const unsub = onSnapshot(
+      cartQuery,
+      async (snapshot) => {
+        try {
+          const docs: CartDoc[] = snapshot.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as any),
+          }))
 
-        const startDate = fromDate
-          ? new Date(fromDate + "T00:00:00")
-          : new Date(2025, 3, 1)
+          const startDate = fromDate
+            ? new Date(fromDate + "T00:00:00")
+            : new Date(2025, 3, 1)
 
-        const endDate = toDate
-          ? new Date(toDate + "T23:59:59")
-          : new Date()
+          const endDate = toDate
+            ? new Date(toDate + "T23:59:59")
+            : new Date()
 
-        // Filter + sort locally using "date"
-        const filteredDocs = docs
-          .filter((c) => {
-            const created = safeToDate(c.date)
-            if (!created) return false
-            return created >= startDate && created <= endDate
-          })
-          .sort((a, b) => {
-            const da = safeToDate(a.date) || new Date(0)
-            const dbb = safeToDate(b.date) || new Date(0)
-            return dbb.getTime() - da.getTime()
-          })
+          const filteredDocs = docs
+            .filter((c) => {
+              const created = safeToDate(c.date)
+              if (!created) return false
+              return created >= startDate && created <= endDate
+            })
+            .sort((a, b) => {
+              const da = safeToDate(a.date) || new Date(0)
+              const dbb = safeToDate(b.date) || new Date(0)
+              return dbb.getTime() - da.getTime()
+            })
 
-        setAllCart(filteredDocs)
-        await hydrateCustomers(filteredDocs)
-      } catch (e: any) {
-        console.error("Cart fetch error:", e)
-        setError(e?.message || String(e) || "Failed to load cart.")
-      } finally {
+          setAllCart(filteredDocs)
+
+          // Hydrate customers without crashing UI
+          await hydrateCustomers(filteredDocs)
+
+          setLoading(false)
+        } catch (err: any) {
+          console.error("Snapshot processing error:", err)
+          setError(err?.message || "Realtime update failed.")
+          setLoading(false)
+        }
+      },
+      (err) => {
+        console.error("Realtime cart listener error:", err)
+        setError(err?.message || "Realtime listener failed.")
         setLoading(false)
       }
-    }
+    )
 
-    fetchCart()
+    return () => unsub()
   }, [db, fromDate, toDate])
 
   // ---------- Search + Status Filter ----------
@@ -351,7 +335,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
           Cart Services ({filteredCart.length})
         </CardTitle>
         <CardDescription>
-          Services added to cart (filtered by date)
+          Live cart services (filtered by date field)
         </CardDescription>
       </CardHeader>
 

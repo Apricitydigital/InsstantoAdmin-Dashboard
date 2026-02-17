@@ -15,6 +15,7 @@ import {
   doc,
   getDocs,
   query,
+  onSnapshot,
   where
 } from "firebase/firestore"
 
@@ -56,36 +57,38 @@ export function DetailsSheet({
   // FETCH START-TO-END DATA
   // ----------------------------------------------------
   useEffect(() => {
-    if (!booking?.id) return
+    if (!booking?.id || !open) return
 
-    const fetchDetails = async () => {
-      try {
-        setLoading(true)
+    setLoading(true)
 
-        const bookingRef = doc(db, "bookings", booking.id)
+    const bookingRef = doc(db, "bookings", booking.id)
 
-        const q = query(
-          collection(db, "bookingDetails_StartToEnd"),
-          where("bookingId", "==", bookingRef)
-        )
+    const q = query(
+      collection(db, "bookingDetails_StartToEnd"),
+      where("bookingId", "==", bookingRef)
+    )
 
-        const snap = await getDocs(q)
-
-        if (!snap.empty) {
-          setDetailData(snap.docs[0].data())
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          setDetailData(snapshot.docs[0].data())
         } else {
           setDetailData(null)
         }
 
-      } catch (err) {
-        console.error("Error loading details:", err)
-      } finally {
+        setLoading(false)
+      },
+      (error) => {
+        console.error("Realtime details error:", error)
         setLoading(false)
       }
-    }
+    )
 
-    fetchDetails()
-  }, [booking, db])
+    return () => unsub()
+  }, [booking?.id, db, open])
+
+
 
   // ----------------------------------------------------
   // RENDER
