@@ -37,11 +37,11 @@ export function PerformanceMetrics({
   const [categoriesPage, setCategoriesPage] = useState(1);
   const [peakHoursPage, setPeakHoursPage] = useState(1);
 
-useEffect(() => {
-  const loadCategories = async () => {
-    const categories = await fetchTopCategories(fromDate, toDate);
-    setTopCategories(categories);
-  };
+  useEffect(() => {
+    const loadCategories = async () => {
+      const categories = await fetchTopCategories(fromDate, toDate);
+      setTopCategories(categories);
+    };
 
     const loadSlots = async () => {
       const slots = await fetchMostBookedSlots(fromDate, toDate);
@@ -100,33 +100,33 @@ useEffect(() => {
               <p className="text-sm text-muted-foreground">No data available</p>
             ) : (
               <>
-             {paginatedPeakHours.map((hour, index) => (
-  <div key={index} className="flex flex-col justify-between py-1">
-    {/* Row 1: Time + Revenue */}
-    <div className="flex items-center justify-between">
-   <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-  {hour.time}
-  <Badge variant="outline" className="text-xs">
-    {hour.bookings}
-  </Badge>
-</span>
+                {paginatedPeakHours.map((hour, index) => (
+                  <div key={index} className="flex flex-col justify-between py-1">
+                    {/* Row 1: Time + Revenue */}
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        {hour.time}
+                        <Badge variant="outline" className="text-xs">
+                          {hour.bookings}
+                        </Badge>
+                      </span>
 
-            <div className="flex items-center gap-3">
-        <Progress value={hour.percentage} className="w-16 h-2" />
-        <span className="text-xs text-muted-foreground w-8">
-          {hour.percentage}%
-        </span>
-      </div>
-      <span className="text-sm font-semibold text-green-600">
-        ₹{hour.revenue?.toLocaleString("en-IN") || 0}
-      </span>
-    </div>
+                      <div className="flex items-center gap-3">
+                        <Progress value={hour.percentage} className="w-16 h-2" />
+                        <span className="text-xs text-muted-foreground w-8">
+                          {hour.percentage}%
+                        </span>
+                      </div>
+                      <span className="text-sm font-semibold text-green-600">
+                        ₹{hour.revenue?.toLocaleString("en-IN") || 0}
+                      </span>
+                    </div>
 
-    {/* Row 2: Progress + Booking Count */}
-    {/* <div className="flex items-center justify-end mt-1">
+                    {/* Row 2: Progress + Booking Count */}
+                    {/* <div className="flex items-center justify-end mt-1">
     </div> */}
-  </div>
-))}
+                  </div>
+                ))}
 
                 {/* Pagination Controls */}
                 {totalPeakHoursPages > 1 && (
@@ -186,7 +186,7 @@ useEffect(() => {
                   {/* Row 2: Top Service + Booking Count */}
                   <div className="flex items-center justify-between mt-0.5">
                     <span className="text-xs text-muted-foreground">
-                      {category.topService}   
+                      {category.topService}
                     </span>
                     <Badge variant="outline" className="text-xs">
                       {category.totalBookings}
