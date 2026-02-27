@@ -61,7 +61,7 @@ export default function PartnersPage() {
                 </button>
               </div>
             </div>
-            <PartnerStats />
+            <PartnerStats fromDate={fromDate} toDate={toDate} />
             <PartnerTable fromDate={fromDate} toDate={toDate} />
 
           </main>

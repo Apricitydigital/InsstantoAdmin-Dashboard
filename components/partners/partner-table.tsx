@@ -38,23 +38,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 import { Search, Eye, Download } from "lucide-react"
+import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
 
 /* ------------------------------------------------------------------ */
 /* CONSTANTS */
 /* ------------------------------------------------------------------ */
-
-const ALLOWED_PARTNER_IDS = [
-  "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-  "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-  "VxxapfO7l8YM5f6xmFqpThc17eD3",
-  "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
-  "7KlujhUyJbeCTPG6Pty8exlxXuM2",
-  "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
-  "MstGdrDCHkZ1KKf0xtZctauIovf2",
-  "OgioZJvg0DWWRnqZLj2AUMUljZN2",
-  "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
-  "uSZdJdat03froahSdGmPpFWDGhi2",
-]
 
 const STATUS_OPTIONS = [
   "All",
@@ -236,7 +224,7 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
 
       const matchesPartnerIds =
         partnerIdFilter === "all" ||
-        ALLOWED_PARTNER_IDS.includes(p.id)
+        PROVIDER_ID_LIST.includes(p.id as typeof PROVIDER_ID_LIST[number])
 
       const matchesStatus =
         statusFilter === "All" || p.status === statusFilter

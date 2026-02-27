@@ -10,6 +10,7 @@ export interface SupportTicket {
   description: string
   assignedTo?: string
   createdAt: string
+  contact_no: string
   updatedAt: string
   resolvedAt?: string
   note: string
@@ -23,6 +24,7 @@ export interface Review {
   partnerName: string
   bookingId: string
   serviceId: string
+
   serviceName: string
   rating: number
   comment: string

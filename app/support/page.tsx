@@ -13,13 +13,7 @@ import { Search, MessageSquare, AlertTriangle, Clock, CheckCircle, Loader2, Star
 
 import { getSupportTickets, getPartnerReviews } from "@/lib/queries/support"
 import type { SupportTicket } from "@/types/support"
-
-// partnerIds used everywhere
-const partnerIds = [
-  "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-  "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-  "VxxapfO7l8YM5f6xmFqpThc17eD3"
-]
+import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
 
 export default function SupportPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -55,7 +49,7 @@ export default function SupportPage() {
 
   const loadReviews = async () => {
     try {
-      const data = await getPartnerReviews(partnerIds)
+      const data = await getPartnerReviews(PROVIDER_ID_LIST)
       setReviews(data)
     } catch (error) {
       console.error("Error loading reviews:", error)
@@ -263,8 +257,12 @@ export default function SupportPage() {
                     paginatedTickets.map((ticket) => (
                       <TableRow key={ticket.id}>
                         <TableCell className="font-mono">#{ticket.id.substring(0, 8)}</TableCell>
-                        <TableCell className="font-medium">{ticket.customerName}</TableCell>
-                        <TableCell>
+<TableCell>
+  <div className="flex flex-col">
+    <span className="font-medium">{ticket.customerName}</span>
+    <span className="text-sm text-gray-500">{ticket.contact_no}</span>
+  </div>
+</TableCell>                        <TableCell>
                           <div className="max-w-xs truncate">{ticket.subject}</div>
                         </TableCell>
                         <TableCell>

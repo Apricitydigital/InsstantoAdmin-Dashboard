@@ -183,8 +183,7 @@ export default function DashboardPage() {
             </div>
 
             {/* ---- Performance Metrics ---- */}
-            <PerformanceMetrics fromDate={""} toDate={""} />
-
+            <PerformanceMetrics fromDate={fromDate} toDate={toDate} />
           </main>
         </div>
       </div>

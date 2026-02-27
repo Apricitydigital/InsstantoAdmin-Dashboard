@@ -81,7 +81,7 @@ export function PerformanceMetrics({
     (peakHoursPage - 1) * ITEMS_PER_PAGE,
     peakHoursPage * ITEMS_PER_PAGE
   );
-
+const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {/* Peak Hours */}
@@ -171,29 +171,64 @@ export function PerformanceMetrics({
             <p className="text-sm text-muted-foreground">No bookings found</p>
           ) : (
             <div className="space-y-3">
-              {paginatedCategories.map((category, index) => (
-                <div key={index} className="flex flex-col justify-between py-1">
-                  {/* Row 1: Category Name + Revenue */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">
-                      {category.categoryName}
-                    </span>
-                    <span className="text-sm font-semibold text-green-600">
-                      ₹{category.totalRevenue?.toLocaleString("en-IN") || 0}
-                    </span>
-                  </div>
+{paginatedCategories.map((category, index) => (
+  <div
+    key={index}
+    className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50"
+    onClick={() =>
+      setExpandedCategory(
+        expandedCategory === category.categoryName
+          ? null
+          : category.categoryName
+      )
+    }
+  >
+    {/* Header */}
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-semibold text-muted-foreground">
+          {category.categoryName}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Most Booked: {category.mostBookedService}
+        </p>
+      </div>
 
-                  {/* Row 2: Top Service + Booking Count */}
-                  <div className="flex items-center justify-between mt-0.5">
-                    <span className="text-xs text-muted-foreground">
-                      {category.topService}
-                    </span>
-                    <Badge variant="outline" className="text-xs">
-                      {category.totalBookings}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+      <div className="text-right">
+        <p className="text-sm font-bold text-green-600">
+          ₹{category.totalRevenue.toLocaleString("en-IN")}
+        </p>
+        <Badge variant="outline" className="text-xs mt-1">
+          {category.totalBookings}
+        </Badge>
+      </div>
+    </div>
+
+    {/* Expandable Services */}
+    {expandedCategory === category.categoryName && (
+      <div className="mt-3 border-t pt-3 space-y-2">
+        {category.services.map((service, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between text-xs"
+          >
+            <span className="text-muted-foreground">
+              {service.serviceName}
+            </span>
+            <div className="flex gap-3">
+              <span className="text-green-600 font-medium">
+                ₹{service.revenue.toLocaleString("en-IN")}
+              </span>
+              <Badge variant="secondary">
+                {service.bookings}
+              </Badge>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+))}
 
 
               {/* Pagination Controls */}

@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { doc, collection, query, where, getDocs } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
+import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
 
 interface ChartPlaceholderProps {
   title: string
@@ -33,20 +34,7 @@ export function ChartPlaceholder({
 
   const fetchBookingsData = async (offset: number) => {
     const db = getFirestoreDb()
-    const customerIds = [
-        "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-        "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-        "VxxapfO7l8YM5f6xmFqpThc17eD3",
-        "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
-        "7KlujhUyJbeCTPG6Pty8exlxXuM2",
-        "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
-        "MstGdrDCHkZ1KKf0xtZctauIovf2",
-        "OgioZJvg0DWWRnqZLj2AUMUljZN2",
-        "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
-        "uSZdJdat03froahSdGmPpFWDGhi2",
-
-    ]
-    const customerRefs = customerIds.map((id) => doc(db, "customer", id))
+    const customerRefs = PROVIDER_ID_LIST.map((id) => doc(db, "customer", id))
 
     const currentDate = new Date()
     // Generate 6 months starting from offset

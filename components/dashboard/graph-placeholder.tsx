@@ -16,6 +16,7 @@ import {
 import { collection, query, where, getDocs, doc } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
+import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
 
 interface GraphPlaceholderProps {
   title: string
@@ -51,20 +52,7 @@ export function GraphPlaceholder({
   const fetchRevenueData = async (offset: number) => {
     const db = getFirestoreDb()
 
-    const providerIds = [
-        "mwBcGMWLwDULHIS9hXx7JLuRfCi1",
-        "Dmoo33tCx0OU1HMtapISBc9Oeeq2",
-        "VxxapfO7l8YM5f6xmFqpThc17eD3",
-        "Q0kKYbdOKVbeZsdiLGsJoM5BWQl1",
-        "7KlujhUyJbeCTPG6Pty8exlxXuM2",
-        "fGLJCCFDEneQZ7ciz71Q29WBgGQ2",
-        "MstGdrDCHkZ1KKf0xtZctauIovf2",
-        "OgioZJvg0DWWRnqZLj2AUMUljZN2",
-        "B1FsSfpqRIPS6Sg0fn3QetCOyAw2",
-        "uSZdJdat03froahSdGmPpFWDGhi2",
-
-    ]
-    const providerRefs = providerIds.map((id) => doc(db, "customer", id))
+    const providerRefs = PROVIDER_ID_LIST.map((id) => doc(db, "customer", id))
 
     const now = new Date()
     // Calculate date range based on offset
