@@ -13,6 +13,8 @@ import {
 import { getFirestoreDb } from "@/lib/firebase";
 import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
 import Papa from "papaparse";
+import { getPnLData } from "@/lib/queries/getPnLdata"
+
 
 
 export type BookingStats = {
@@ -355,9 +357,31 @@ if (rows.length > 0) {
 const cacExpense = prorateByMonthKey(expenseByMonthKey, from, to);
 const cac = customersWithOneBooking > 0 ? cacExpense / customersWithOneBooking : 0;
 
-const totalExpensePNL = prorateByMonthKey(expenseByMonthKey, from, to);
-const netPnL = netRevenue - totalExpensePNL;
+const pnlRes = await fetch("/api/pnl");
+const { data: pnlData } = await pnlRes.json();
 
+let settlementsInRange = 0;
+let expensesInRange = 0;
+
+for (const m of pnlData) {
+  // convert "Jan 2026" → Date
+  const monthDate = new Date(m.month);
+
+  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+
+  // check if month overlaps selected range
+  if (monthEnd >= from && monthStart <= to) {
+    settlementsInRange += m.settlements || 0;
+    expensesInRange += m.expenses || 0;
+  }
+}
+
+const netPnL = settlementsInRange - expensesInRange;
+
+console.log("Settlements:", settlementsInRange);
+console.log("Expenses:", expensesInRange);
+console.log("NetPnL:", netPnL);
 
   /* ------------------------------
      CAC CHANGE (PREVIOUS RANGE)
