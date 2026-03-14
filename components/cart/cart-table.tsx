@@ -136,7 +136,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
         const d = snap.data() as any
         newMap[snap.ref.path] = {
           name: d?.customer_name || d?.display_name,
-          phone: d?.phone_number,
+  phone: d?.phone_number || d?.phoneNumber || d?.phone || "",
         }
       })
 
@@ -149,7 +149,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
         const d = snap.data() as any
         newMap[`uid:${uid}`] = {
           name: d?.customer_name || d?.display_name || uid,
-          phone: d?.phone_number,
+  phone: d?.phone_number || d?.phoneNumber || d?.phone || "",
         }
       })
 

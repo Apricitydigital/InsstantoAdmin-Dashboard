@@ -966,7 +966,9 @@ export default function PartnerDetailsPage() {
                     />
                   </TabsContent>
                   <TabsContent value="bookings" className="mt-6">
-                    <PartnerBookingsSection partnerId={partnerId} />
+                    <PartnerBookingsSection partnerId={partnerId}
+                      fromDate={fromDate}
+                      toDate={toDate} />
                   </TabsContent>
                   <TabsContent value="loans" className="mt-6">
                     <PartnerLoansSection
