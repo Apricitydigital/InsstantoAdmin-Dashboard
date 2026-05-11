@@ -118,24 +118,70 @@ export function PartnerFuelSection({
           partnerFuel.forEach((fuel: any) => {
             if (!fuel) return
 
-            if (fuel.FirstBill || fuel.FirstBillAmount) {
+            // ================= FIRST BILL =================
+
+            const firstBill =
+              fuel.FirstBill ||
+              fuel.firstBill ||
+              fuel.firstbill ||
+              ""
+
+            const firstBillAmount =
+              fuel.FirstBillAmount ||
+              fuel.firstBillAmount ||
+              fuel.firstbillAmount ||
+              fuel.firstbillamount ||
+              0
+
+            const firstNote =
+              fuel.FirstNote ||
+              fuel.firstNote ||
+              fuel.firstnote ||
+              ""
+
+            // ================= SECOND BILL =================
+
+            const secondBill =
+              fuel.SecondBill ||
+              fuel.secondBill ||
+              fuel.secondbill ||
+              ""
+
+            const secondBillAmount =
+              fuel.SecondBillAmount ||
+              fuel.secondBillAmount ||
+              fuel.secondbillAmount ||
+              fuel.secondbillamount ||
+              0
+
+            const secondNote =
+              fuel.SecondNote ||
+              fuel.secondNote ||
+              fuel.secondnote ||
+              ""
+
+            // ================= PUSH DATA =================
+
+            if (firstBill || firstBillAmount) {
               bookingEntry.bills.push({
                 billNumber: 1,
-                billImage: fuel.FirstBill || "",
-                billAmount: fuel.FirstBillAmount || 0,
-                note: fuel.FirstNote || "",
+                billImage: firstBill,
+                billAmount: firstBillAmount,
+                note: firstNote,
               })
-              total += fuel.FirstBillAmount || 0
+
+              total += Number(firstBillAmount || 0)
             }
 
-            if (fuel.SecondBill || fuel.SecondBillAmount) {
+            if (secondBill || secondBillAmount) {
               bookingEntry.bills.push({
                 billNumber: 2,
-                billImage: fuel.SecondBill || "",
-                billAmount: fuel.SecondBillAmount || 0,
-                note: fuel.SecondNote || "",
+                billImage: secondBill,
+                billAmount: secondBillAmount,
+                note: secondNote,
               })
-              total += fuel.SecondBillAmount || 0
+
+              total += Number(secondBillAmount || 0)
             }
           })
         })
