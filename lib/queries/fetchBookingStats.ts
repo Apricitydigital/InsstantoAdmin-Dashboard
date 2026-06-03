@@ -62,7 +62,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     )
     const cancelledByCustomerQuery = qWithFilters(
         where("provider_id", "in", customerRefs),
-        where("status", "==", "Cancelled_By_Customer")
+        where("status", "==", "Cancelled")
     )
 
     const [

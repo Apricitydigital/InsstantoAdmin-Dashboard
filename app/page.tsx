@@ -15,6 +15,8 @@ import { ExpensePieChart } from "@/components/dashboard/expense-pie-chart";
 import { TopPartnersCard } from "@/components/dashboard/top-partners-card";
 import { DailyOverviewCard } from "@/components/dashboard/daily-overview"
 import { PnLGraph } from "@/components/dashboard/PnLGraph";
+import AiAnalysisChatbot from "@/components/admin/AiAnalysisChatbot";
+import HomePageAlert from "@/components/dashboard/HomePageAlert";
 
 function formatDateInput(d: Date) {
   return d.toLocaleDateString("en-CA"); // ✅ Formats as YYYY-MM-DD
@@ -129,6 +131,7 @@ export default function DashboardPage() {
         <AdminSidebar />
         <div className="flex flex-col sm:gap-4 sm:py-4">
           <AdminHeader title="Dashboard Overview" />
+          <HomePageAlert />
           <main className="flex-1 space-y-6 p-4 md:p-6">
             {/* ---- Date Range Filter ---- */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -184,6 +187,8 @@ export default function DashboardPage() {
 
             {/* ---- Performance Metrics ---- */}
             <PerformanceMetrics fromDate={fromDate} toDate={toDate} />
+
+<AiAnalysisChatbot module="dashboard" />
           </main>
         </div>
       </div>
