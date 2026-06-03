@@ -420,7 +420,7 @@ export default function AiAnalysisChatbot({
       </button>
 
       {isOpen && (
-        <div className="fixed bottom-6 right-6 z-50 flex h-[640px] w-[440px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl">
+        <div className="fixed inset-x-3 bottom-3 z-50 flex h-[82vh] w-auto flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[760px] sm:w-[620px] sm:max-h-[calc(100vh-48px)] sm:max-w-[calc(100vw-48px)]">
           <div className="flex items-start justify-between border-b border-neutral-200 bg-neutral-950 px-4 py-4 text-white">
             <div className="flex gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
@@ -455,7 +455,7 @@ export default function AiAnalysisChatbot({
                 }`}
               >
                 <div
-                  className={`max-w-[86%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                     item.role === "user"
                       ? "bg-black text-white"
                       : "border border-neutral-200 bg-white text-neutral-900"
