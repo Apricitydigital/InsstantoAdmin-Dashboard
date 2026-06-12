@@ -80,10 +80,17 @@ export async function getSupportTickets(): Promise<SupportTicket[]> {
       }
 
       tickets.push({
-        id: docSnap.id,
-        customerId: data.customer_id || "",
-        customerName,
-        bookingId: data.booking_id || undefined,
+  id: docSnap.id,
+  customerId: data.customer_id || "",
+  customerName,
+  contact_no:
+    data.contact_no ||
+    data.customer_phone ||
+    data.customer_mobile ||
+    data.phone_number ||
+    data.mobile_number ||
+    "",
+  bookingId: data.booking_id || undefined,
         type: mapComplaintType(data.customer_complaint),
         priority: determinePriority(
           data.complaint_status,
@@ -153,10 +160,17 @@ export async function getTicketById(
     }
 
     return {
-      id: docSnap.id,
-      customerId: data.customer_id || "",
-      customerName,
-      bookingId: data.booking_id || undefined,
+  id: docSnap.id,
+  customerId: data.customer_id || "",
+  customerName,
+  contact_no:
+    data.contact_no ||
+    data.customer_phone ||
+    data.customer_mobile ||
+    data.phone_number ||
+    data.mobile_number ||
+    "",
+  bookingId: data.booking_id || undefined,
       type: mapComplaintType(data.customer_complaint),
       priority: determinePriority(
         data.complaint_status,

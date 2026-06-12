@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, MessageSquare, AlertTriangle, Clock, CheckCircle, Loader2, Star } from "lucide-react"
 
-import { getSupportTickets, getPartnerReviews } from "@/lib/queries/support"
+import { getSupportTickets, getPartnerReviews, updateTicketStatus } from "@/lib/queries/support"
 import type { SupportTicket } from "@/types/support"
 import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
 
@@ -21,6 +21,9 @@ export default function SupportPage() {
   const [tickets, setTickets] = useState<SupportTicket[]>([])
   const [reviews, setReviews] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null)
+  const [completionNote, setCompletionNote] = useState("")
+  const [updatingTicket, setUpdatingTicket] = useState(false)
 
   // pagination for tickets
   const [currentPageTickets, setCurrentPageTickets] = useState(1)
@@ -101,6 +104,29 @@ export default function SupportPage() {
     }
   }
 
+  const handleCompleteComplaint = async () => {
+    if (!selectedTicket) return
+
+    setUpdatingTicket(true)
+    try {
+      const success = await updateTicketStatus(
+        selectedTicket.id,
+        "resolved",
+        completionNote
+      )
+
+      if (success) {
+        setSelectedTicket(null)
+        setCompletionNote("")
+        await loadTickets()
+      }
+    } catch (error) {
+      console.error("Error completing complaint:", error)
+    } finally {
+      setUpdatingTicket(false)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "open":
@@ -129,6 +155,8 @@ export default function SupportPage() {
       </div>
     )
   }
+
+
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -257,12 +285,12 @@ export default function SupportPage() {
                     paginatedTickets.map((ticket) => (
                       <TableRow key={ticket.id}>
                         <TableCell className="font-mono">#{ticket.id.substring(0, 8)}</TableCell>
-<TableCell>
-  <div className="flex flex-col">
-    <span className="font-medium">{ticket.customerName}</span>
-    <span className="text-sm text-gray-500">{ticket.contact_no}</span>
-  </div>
-</TableCell>                        <TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{ticket.customerName}</span>
+                            <span className="text-sm text-gray-500">{ticket.contact_no}</span>
+                          </div>
+                        </TableCell>                        <TableCell>
                           <div className="max-w-xs truncate">{ticket.subject}</div>
                         </TableCell>
                         <TableCell>
@@ -277,8 +305,20 @@ export default function SupportPage() {
                           <Badge className={getStatusColor(ticket.status)}>{ticket.status.replace("_", " ")}</Badge>
                         </TableCell>
                         <TableCell>{new Date(ticket.createdAt).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                          <div className="max-w-xs truncate">{ticket.note}</div>
+                        <TableCell>
+                          {ticket.status !== "resolved" ? (
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() => setSelectedTicket(ticket)}
+                            >
+                              Complete
+                            </Button>
+                          ) : (
+                            <Badge className="bg-green-100 text-green-800 border-green-200">
+                              Completed
+                            </Badge>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -390,6 +430,48 @@ export default function SupportPage() {
 
         </Tabs>
       </div>
+
+      {selectedTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Complete Complaint
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-600">
+              Add a note before marking this complaint as resolved.
+            </p>
+
+            <textarea
+              value={completionNote}
+              onChange={(e) => setCompletionNote(e.target.value)}
+              placeholder="Write customer care note..."
+              className="mt-4 min-h-28 w-full rounded-md border border-gray-300 p-3 text-sm outline-none focus:border-blue-500"
+            />
+
+            <div className="mt-5 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelectedTicket(null)
+                  setCompletionNote("")
+                }}
+                disabled={updatingTicket}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                onClick={handleCompleteComplaint}
+                disabled={updatingTicket}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {updatingTicket ? "Completing..." : "Submit"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
