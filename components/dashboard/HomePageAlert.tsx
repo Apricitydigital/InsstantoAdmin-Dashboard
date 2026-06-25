@@ -31,6 +31,8 @@ import {
   AlertTriangle,
   ArrowRight,
   Clock,
+  CreditCard,
+  Crown,
 } from "lucide-react";
 
 type AlertItem = {
@@ -71,18 +73,32 @@ export default function HomePageAlert() {
   const [bookings, setBookings] = useState(0);
   const [complaints, setComplaints] = useState(0);
   const [reviews, setReviews] = useState(0);
+  const [payments, setPayments] = useState(0);
+  const [subscriptions, setSubscriptions] = useState(0);
 
   const [latestBookings, setLatestBookings] = useState<AlertItem[]>([]);
   const [latestComplaints, setLatestComplaints] = useState<AlertItem[]>([]);
   const [latestReviews, setLatestReviews] = useState<AlertItem[]>([]);
+  const [latestPayments, setLatestPayments] = useState<AlertItem[]>([]);
+  const [latestSubscriptions, setLatestSubscriptions] = useState<AlertItem[]>(
+    []
+  );
 
   useEffect(() => {
     let bookingCount = 0;
     let complaintCount = 0;
     let reviewCount = 0;
+    let paymentCount = 0;
+    let subscriptionCount = 0;
 
     const openIfNeeded = () => {
-      if (bookingCount > 0 || complaintCount > 0 || reviewCount > 0) {
+      if (
+        bookingCount > 0 ||
+        complaintCount > 0 ||
+        reviewCount > 0 ||
+        paymentCount > 0 ||
+        subscriptionCount > 0
+      ) {
         setOpen(true);
       }
     };
@@ -102,10 +118,30 @@ export default function HomePageAlert() {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 30);
+    twoDaysAgo.setHours(0, 0, 0, 0);
+
     const reviewQuery = query(
       collection(db, "reviews"),
       where("createdAt", ">=", Timestamp.fromDate(startOfToday)),
       orderBy("createdAt", "desc"),
+      limit(10)
+    );
+
+    const paymentQuery = query(
+      collection(db, "payments"),
+      where("status", "==", "CAPTURED"),
+      where("createdAt", ">=", Timestamp.fromDate(twoDaysAgo)),
+      orderBy("createdAt", "desc"),
+      limit(10)
+    );
+
+    const subscriptionQuery = query(
+      collection(db, "Subscription"),
+      where("Status", "==", "Active"),
+      where("startDate", ">=", Timestamp.fromDate(twoDaysAgo)),
+      orderBy("startDate", "desc"),
       limit(10)
     );
 
@@ -203,20 +239,73 @@ export default function HomePageAlert() {
       openIfNeeded();
     });
 
+    const unsubPayments = onSnapshot(paymentQuery, (snap) => {
+      paymentCount = snap.size;
+      setPayments(paymentCount);
+
+      const items = snap.docs.slice(0, 5).map((doc) => {
+        const data = doc.data() as any;
+
+        const createdAt =
+          getTimestampDate(data.createdAt) ||
+          getTimestampDate(data.created_time) ||
+          getTimestampDate(data.date);
+
+        return {
+          id: doc.id,
+          title: data.paymentId || data.id || "New payment received",
+          subtitle: `${
+            data.customerName || data.customer_name || "Customer"
+          } • ₹${data.amount || 0}`,
+          createdAt,
+        };
+      });
+
+      setLatestPayments(items);
+      openIfNeeded();
+    });
+
+    const unsubSubscriptions = onSnapshot(subscriptionQuery, (snap) => {
+      subscriptionCount = snap.size;
+      setSubscriptions(subscriptionCount);
+
+      const items = snap.docs.slice(0, 5).map((doc) => {
+        const data = doc.data() as any;
+
+        const createdAt = getTimestampDate(data.startDate);
+
+        return {
+          id: doc.id,
+          title: data.Name || "New subscription",
+          subtitle: `${data.contactNo || data.customerName || "Customer"} • ${
+            data.Status || "Active"
+          }`,
+          createdAt,
+        };
+      });
+
+      setLatestSubscriptions(items);
+      openIfNeeded();
+    });
+
     return () => {
       unsubBookings();
       unsubComplaints();
       unsubReviews();
+      unsubPayments();
+      unsubSubscriptions();
     };
   }, [db]);
 
-  const totalAlerts = bookings + complaints + reviews;
+  const totalAlerts = bookings + complaints + reviews + payments + subscriptions;
 
   const highestPriority = useMemo(() => {
     if (complaints > 0) {
       return {
         label: "High priority",
-        message: `${complaints} complaint${complaints > 1 ? "s" : ""} need attention.`,
+        message: `${complaints} complaint${
+          complaints > 1 ? "s" : ""
+        } need attention.`,
         color: "destructive" as const,
       };
     }
@@ -224,21 +313,45 @@ export default function HomePageAlert() {
     if (bookings > 0) {
       return {
         label: "Action required",
-        message: `${bookings} pending booking${bookings > 1 ? "s" : ""} need confirmation.`,
+        message: `${bookings} pending booking${
+          bookings > 1 ? "s" : ""
+        } need confirmation.`,
         color: "default" as const,
+      };
+    }
+
+    if (payments > 0) {
+      return {
+        label: "Payment alert",
+        message: `${payments} payment alert${
+          payments > 1 ? "s" : ""
+        } received in the last 2 days.`,
+        color: "secondary" as const,
+      };
+    }
+
+    if (subscriptions > 0) {
+      return {
+        label: "New subscription",
+        message: `${subscriptions} new subscription${
+          subscriptions > 1 ? "s" : ""
+        } received in the last 2 days.`,
+        color: "secondary" as const,
       };
     }
 
     if (reviews > 0) {
       return {
         label: "New activity",
-        message: `${reviews} new review${reviews > 1 ? "s" : ""} received today.`,
+        message: `${reviews} new review${
+          reviews > 1 ? "s" : ""
+        } received today.`,
         color: "secondary" as const,
       };
     }
 
     return null;
-  }, [bookings, complaints, reviews]);
+  }, [bookings, complaints, reviews, payments, subscriptions]);
 
   if (totalAlerts === 0) {
     return null;
@@ -267,7 +380,7 @@ export default function HomePageAlert() {
       borderClass: "border-red-200",
       items: latestComplaints,
       actionLabel: "View complaints",
-      path: "/complaints",
+      path: "/support",
     },
     {
       key: "reviews",
@@ -281,11 +394,35 @@ export default function HomePageAlert() {
       actionLabel: "View reviews",
       path: "/reviews",
     },
+    {
+      key: "payments",
+      title: "Payment Alerts",
+      count: payments,
+      icon: CreditCard,
+      iconClass: "text-green-600",
+      bgClass: "bg-green-50",
+      borderClass: "border-green-200",
+      items: latestPayments,
+      actionLabel: "View payments",
+      path: "/payments",
+    },
+    {
+      key: "subscriptions",
+      title: "New Subscriptions",
+      count: subscriptions,
+      icon: Crown,
+      iconClass: "text-purple-600",
+      bgClass: "bg-purple-50",
+      borderClass: "border-purple-200",
+      items: latestSubscriptions,
+      actionLabel: "View subscriptions",
+      path: "/customers/subscriptions",
+    },
   ].filter((item) => item.count > 0);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -315,14 +452,16 @@ export default function HomePageAlert() {
           </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-xl border p-3">
-            <div className="text-xs text-muted-foreground">Pending Bookings</div>
+            <div className="break-words text-xs text-muted-foreground">
+              Pending Bookings
+            </div>
             <div className="mt-1 text-2xl font-bold">{bookings}</div>
           </div>
 
           <div className="rounded-xl border p-3">
-            <div className="text-xs text-muted-foreground">
+            <div className="break-words text-xs text-muted-foreground">
               Pending Complaints
             </div>
             <div className="mt-1 text-2xl font-bold text-red-600">
@@ -331,10 +470,28 @@ export default function HomePageAlert() {
           </div>
 
           <div className="rounded-xl border p-3">
-            <div className="text-xs text-muted-foreground">
+            <div className="break-words text-xs text-muted-foreground">
               New Reviews Today
             </div>
             <div className="mt-1 text-2xl font-bold">{reviews}</div>
+          </div>
+
+          <div className="rounded-xl border p-3">
+            <div className="break-words text-xs text-muted-foreground">
+              Payment Alerts
+            </div>
+            <div className="mt-1 text-2xl font-bold text-green-600">
+              {payments}
+            </div>
+          </div>
+
+          <div className="rounded-xl border p-3">
+            <div className="break-words text-xs text-muted-foreground">
+              New Subscriptions
+            </div>
+            <div className="mt-1 text-2xl font-bold text-purple-600">
+              {subscriptions}
+            </div>
           </div>
         </div>
 

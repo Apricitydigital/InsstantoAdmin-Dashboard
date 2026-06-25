@@ -62,7 +62,7 @@ export function ChartPlaceholder({
 
     snapshot.forEach((doc) => {
       const data = doc.data()
-      const bookingDate = data.timeSlot.toDate()
+      const bookingDate = data.date?.toDate?.()
       const monthName = bookingDate.toLocaleString("default", { month: "short", year: "2-digit" })
       const monthIndex = reversedMonths.indexOf(monthName)
       if (monthIndex !== -1) bookingsCount[monthIndex].bookings += 1

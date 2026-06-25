@@ -130,31 +130,35 @@ export function DetailsSheet({
               value={`${provider?.name ?? "—"}\n${provider?.phone ?? ""}`}
             />
 
-{/* PARTNERS WHO WENT ON SERVICE */}
-{booking?.ChoosePartner?.length > 0 && (
-  <div>
-    <div className="text-xs font-semibold uppercase tracking-widest text-gray-500">
-      Partners Went On Service
-    </div>
+            {/* PARTNERS WHO WENT ON SERVICE */}
+            {booking?.ChoosePartner?.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+                  Partners Went On Service
+                </div>
 
-    <div className="mt-2 space-y-2">
-      {booking.ChoosePartner.map((partnerName: string, index: number) => (
-        <div
-          key={index}
-          className="p-3 border rounded-lg bg-gray-50"
-        >
-          <div className="font-medium">
-            {partnerName}
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+                <div className="mt-2 space-y-2">
+                  {booking.ChoosePartner.map((partnerName: string, index: number) => (
+                    <div
+                      key={index}
+                      className="p-3 border rounded-lg bg-gray-50"
+                    >
+                      <div className="font-medium">
+                        {partnerName}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <DetailBlock label="Services" value={services?.join(", ") || "Unknown"} />
             <DetailBlock label="Address" value={booking.bookingAddress || "—"} />
             <DetailBlock label="otp" value={booking.otp || "—"} />
             <DetailBlock label="Amount Paid" value={`₹${booking.amount_paid?.toLocaleString() || 0}`} />
+            <DetailBlock
+              label="Wallet Amount Used"
+              value={`₹${booking.walletAmountUsed?.toLocaleString() || 0}`}
+            />
             <DetailBlock label="Partner Fare" value={`₹${booking.partner_fare?.toLocaleString() || 0}`} />
             <DetailBlock label="Status" value={booking.status?.replace("_", " ")} />
 

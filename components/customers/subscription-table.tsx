@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, ChevronLeft, ChevronRight, Search, Star, Eye, Calendar } from "lucide-react"
+import { Loader2, ChevronLeft, ChevronRight, Search, Star, Eye, Calendar, } from "lucide-react"
 
 type SubscriptionDoc = {
   id: string

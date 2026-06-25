@@ -3,28 +3,47 @@
 import { useEffect, useState, useMemo } from "react"
 import {
   collection,
-  doc,
   getDoc,
   getDocs,
   onSnapshot,
-  orderBy,
   query,
-  limit,
   where,
   Timestamp,
   DocumentReference,
-  DocumentData
+  DocumentData,
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Loader2, Phone, Calendar, Search, Filter } from "lucide-react"
 import { DetailsSheet } from "@/components/bookings/booking-component"
+
+// ✅ import from partner.ts
+import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
 
 // ---------- Types ----------
 type BookingDoc = {
@@ -41,13 +60,15 @@ type BookingDoc = {
 }
 
 type PartyInfo = { name?: string; phone?: string }
-type ServiceMap = Record<string, string[]> // bookingId -> service names array
+type ServiceMap = Record<string, string[]>
 
 const PAGE_SIZE = 20
 
+const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
+
 interface BookingTableProps {
-  fromDate: string;
-  toDate: string;
+  fromDate: string
+  toDate: string
 }
 
 export function BookingTable({ fromDate, toDate }: BookingTableProps) {
@@ -61,99 +82,102 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const [error, setError] = useState<string>("")
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [bookingTypeFilter, setBookingTypeFilter] = useState("real")
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedBooking, setSelectedBooking] = useState<BookingDoc | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
-useEffect(() => {
-  setLoading(true)
-  setError("")
+  useEffect(() => {
+    setLoading(true)
+    setError("")
 
-  const bookingsQuery = query(collection(db, "bookings")) // NO where, NO orderBy => no index needed
+    const bookingsQuery = query(collection(db, "bookings"))
 
-  const unsub = onSnapshot(
-    bookingsQuery,
-    async (snapshot) => {
-      try {
-        const docs: BookingDoc[] = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as any),
-        }))
+    const unsub = onSnapshot(
+      bookingsQuery,
+      async (snapshot) => {
+        try {
+          const docs: BookingDoc[] = snapshot.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as any),
+          }))
 
-        const startDate = fromDate
-          ? new Date(fromDate + "T00:00:00")
-          : new Date(2025, 3, 1)
+          const startDate = fromDate
+            ? new Date(fromDate + "T00:00:00")
+            : new Date(2025, 3, 1)
 
-        const endDate = toDate
-          ? new Date(toDate + "T23:59:59")
-          : new Date()
+          const endDate = toDate
+            ? new Date(toDate + "T23:59:59")
+            : new Date()
 
-        // Local filter by date
-        const filteredDocs = docs
-          .filter((b) => {
-            const d = b.date?.toDate?.()
-            if (!d) return false
-            return d >= startDate && d <= endDate
-          })
-          .sort((a, b) => {
-            const da = a.date?.toDate?.() || new Date(0)
-            const dbb = b.date?.toDate?.() || new Date(0)
-            return dbb.getTime() - da.getTime()
-          })
+          const filteredDocs = docs
+            .filter((b) => {
+              const d = b.date?.toDate?.()
+              if (!d) return false
+              return d >= startDate && d <= endDate
+            })
+            .sort((a, b) => {
+              const da = a.date?.toDate?.() || new Date(0)
+              const dbb = b.date?.toDate?.() || new Date(0)
+              return dbb.getTime() - da.getTime()
+            })
 
-        setAllBookings(filteredDocs)
+          setAllBookings(filteredDocs)
 
-        await hydrateParties(filteredDocs)
-        await fetchServicesInfo(filteredDocs)
+          await hydrateParties(filteredDocs)
+          await fetchServicesInfo(filteredDocs)
 
-        setLoading(false)
-      } catch (err: any) {
-        console.error("Realtime booking error:", err)
-        setError(err?.message || "Realtime update failed.")
+          setLoading(false)
+        } catch (err: any) {
+          console.error("Realtime booking error:", err)
+          setError(err?.message || "Realtime update failed.")
+          setLoading(false)
+        }
+      },
+      (err) => {
+        console.error("Booking listener failed:", err)
+        setError(err?.message || "Realtime listener failed.")
         setLoading(false)
       }
-    },
-    (err) => {
-      console.error("Booking listener failed:", err)
-      setError(err?.message || "Realtime listener failed.")
-      setLoading(false)
-    }
-  )
+    )
 
-  return () => unsub()
-}, [db, fromDate, toDate])
+    return () => unsub()
+  }, [db, fromDate, toDate])
 
-
-  // ---------- Fetch customer/provider details ----------
   const hydrateParties = async (docs: BookingDoc[]) => {
     const refs = (key: keyof BookingDoc) =>
-      docs.map(d => d[key]).filter(Boolean) as DocumentReference<DocumentData>[]
+      docs.map((d) => d[key]).filter(Boolean) as DocumentReference<DocumentData>[]
 
     const unique = (arr: DocumentReference<DocumentData>[]) =>
-      Array.from(new Map(arr.map(r => [r.path, r])).values())
+      Array.from(new Map(arr.map((r) => [r.path, r])).values())
 
     const [custSnaps, provSnaps] = await Promise.all([
-      Promise.all(unique(refs("customer_id")).map(r => getDoc(r))),
-      Promise.all(unique(refs("provider_id")).map(r => getDoc(r))),
+      Promise.all(unique(refs("customer_id")).map((r) => getDoc(r))),
+      Promise.all(unique(refs("provider_id")).map((r) => getDoc(r))),
     ])
 
     const newCust: Record<string, PartyInfo> = {}
-    custSnaps.forEach(s => {
+    custSnaps.forEach((s) => {
       const d = s.data() as any
-      newCust[s.ref.path] = { name: d?.customer_name || d?.display_name, phone: d?.phone_number }
+      newCust[s.ref.path] = {
+        name: d?.customer_name || d?.display_name,
+        phone: d?.phone_number,
+      }
     })
 
     const newProv: Record<string, PartyInfo> = {}
-    provSnaps.forEach(s => {
+    provSnaps.forEach((s) => {
       const d = s.data() as any
-      newProv[s.ref.path] = { name: d?.customer_name || d?.display_name, phone: d?.phone_number }
+      newProv[s.ref.path] = {
+        name: d?.customer_name || d?.display_name,
+        phone: d?.phone_number,
+      }
     })
 
-    setCustomerMap(prev => ({ ...prev, ...newCust }))
-    setProviderMap(prev => ({ ...prev, ...newProv }))
+    setCustomerMap((prev) => ({ ...prev, ...newCust }))
+    setProviderMap((prev) => ({ ...prev, ...newProv }))
   }
 
-  // ---------- Fetch services from cart collection ----------
   const fetchServicesInfo = async (bookingDocs: BookingDoc[]) => {
     try {
       const servicesInfo: ServiceMap = {}
@@ -161,31 +185,29 @@ useEffect(() => {
       await Promise.all(
         bookingDocs.map(async (booking) => {
           const serviceNames: string[] = []
-          
-          // Get subCategoryCart_id references (can be single or array)
+
           const cartRefs = Array.isArray(booking.subCategoryCart_id)
             ? booking.subCategoryCart_id
             : booking.subCategoryCart_id
               ? [booking.subCategoryCart_id]
               : []
 
-          // For each subCategoryCart reference, query the cart collection
           for (const subCategoryRef of cartRefs) {
             try {
-              // Query cart collection where subCategoryCartId matches the reference
               const cartQuery = query(
                 collection(db, "cart"),
                 where("subCategoryCartId", "==", subCategoryRef)
               )
-              
+
               const cartSnapshot = await getDocs(cartQuery)
-              
-              // Extract service_name from each matching cart document
+
               cartSnapshot.forEach((cartDoc) => {
                 const cartData = cartDoc.data()
-                const serviceName = cartData.service_name || 
-                                    cartData.serviceName || 
-                                    "Unknown Service"
+                const serviceName =
+                  cartData.service_name ||
+                  cartData.serviceName ||
+                  "Unknown Service"
+
                 serviceNames.push(serviceName)
               })
             } catch (err) {
@@ -193,32 +215,46 @@ useEffect(() => {
             }
           }
 
-          // Store the service names for this booking
-          servicesInfo[booking.id] = serviceNames.length > 0 
-            ? serviceNames 
-            : ["Unknown Service"]
+          servicesInfo[booking.id] =
+            serviceNames.length > 0 ? serviceNames : ["Unknown Service"]
         })
       )
 
-      setServicesMap(prev => ({ ...prev, ...servicesInfo }))
+      setServicesMap((prev) => ({ ...prev, ...servicesInfo }))
     } catch (error) {
       console.error("Error fetching services info:", error)
     }
   }
 
-  // ---------- Helpers ----------
   const normalize = (v: unknown) => (v ?? "").toString().toLowerCase()
-  const fmtDate = (t?: Timestamp) =>
-    t?.toDate?.()?.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) || "—"
-  const amountPaid = (b: BookingDoc) => (typeof b.amount_paid === "number" ? b.amount_paid : 0)
 
-  // ---------- Filters ----------
+  const fmtDate = (t?: Timestamp) =>
+    t?.toDate?.()?.toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }) || "—"
+
+  const amountPaid = (b: BookingDoc) =>
+    typeof b.amount_paid === "number" ? b.amount_paid : 0
+
   const filteredBookings = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
+
     return allBookings.filter((b) => {
       const services = servicesMap[b.id]?.join(" ") || ""
       const cust = customerMap[b.customer_id?.path ?? ""] || {}
       const prov = providerMap[b.provider_id?.path ?? ""] || {}
+
+      const providerId = b.provider_id?.id
+      const customerId = b.customer_id?.id
+
+      const isRealBooking =
+        !!providerId &&
+        PROVIDER_ID_LIST.includes(providerId as any) &&
+        customerId !== INTERNAL_CUSTOMER_ID
+
+      const matchesBookingType =
+        bookingTypeFilter === "all" || isRealBooking
 
       const text = [
         b.id,
@@ -235,12 +271,21 @@ useEffect(() => {
         .join(" ")
 
       const matchesSearch = !term || text.includes(term)
-      const matchesStatus = statusFilter === "all" || normalize(b.status) === statusFilter
-      return matchesSearch && matchesStatus
-    })
-  }, [allBookings, searchTerm, statusFilter, customerMap, providerMap, servicesMap])
+      const matchesStatus =
+        statusFilter === "all" || normalize(b.status) === statusFilter
 
-  // ---------- Pagination ----------
+      return matchesBookingType && matchesSearch && matchesStatus
+    })
+  }, [
+    allBookings,
+    searchTerm,
+    statusFilter,
+    bookingTypeFilter,
+    customerMap,
+    providerMap,
+    servicesMap,
+  ])
+
   const paginatedBookings = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
     return filteredBookings.slice(start, start + PAGE_SIZE)
@@ -250,9 +295,10 @@ useEffect(() => {
   const hasNext = currentPage < totalPages
   const hasPrev = currentPage > 1
 
-  useEffect(() => setCurrentPage(1), [searchTerm, statusFilter])
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, statusFilter, bookingTypeFilter])
 
-  // ---------- Status Colors ----------
   const statusColors: Record<string, string> = {
     Pending: "bg-orange-100 text-orange-800",
     Accepted: "bg-blue-100 text-blue-800",
@@ -263,7 +309,6 @@ useEffect(() => {
     default: "bg-gray-100 text-gray-800",
   }
 
-  // ---------- Render ----------
   return (
     <Card className="overflow-hidden">
       <CardHeader>
@@ -275,7 +320,6 @@ useEffect(() => {
       </CardHeader>
 
       <CardContent>
-        {/* Filters */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-4">
           <div className="relative w-full sm:w-1/2">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -286,8 +330,20 @@ useEffect(() => {
               className="pl-8"
             />
           </div>
+
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Filter className="h-4 w-4 text-muted-foreground" />
+
+            <Select value={bookingTypeFilter} onValueChange={setBookingTypeFilter}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Booking Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="real">Real Booking</SelectItem>
+                <SelectItem value="all">All Bookings</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Status" />
@@ -304,7 +360,6 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto rounded-md border shadow-sm">
           <Table className="min-w-[900px] w-full text-sm">
             <TableHeader>
@@ -332,16 +387,16 @@ useEffect(() => {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-red-600 p-4">{error}</TableCell>
+                  <TableCell colSpan={10} className="text-red-600 p-4">
+                    {error}
+                  </TableCell>
                 </TableRow>
               ) : paginatedBookings.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                    {filteredBookings.length === 0 ? (
-                      searchTerm ? "No bookings found matching your search." : "No bookings found in this date range."
-                    ) : (
-                      "No more results on this page."
-                    )}
+                    {searchTerm
+                      ? "No bookings found matching your search."
+                      : "No bookings found in this date range."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -353,48 +408,61 @@ useEffect(() => {
                   return (
                     <TableRow
                       key={`${b.id}-${index}`}
-                      className={`${index % 2 === 0 ? "bg-gray-50" : "bg-white"
-                        } hover:bg-muted/40 transition`}
+                      className={`${
+                        index % 2 === 0 ? "bg-gray-50" : "bg-white"
+                      } hover:bg-muted/40 transition`}
                     >
                       <TableCell className="font-medium truncate max-w-[140px]" title={b.id}>
                         {b.id}
                       </TableCell>
+
                       <TableCell className="whitespace-nowrap">
                         <div className="font-medium truncate">{cust.name || "—"}</div>
                         {cust.phone && (
                           <div className="text-xs text-muted-foreground flex items-center">
-                            <Phone className="h-3 w-3 mr-1" /> {cust.phone}
+                            <Phone className="h-3 w-3 mr-1" />
+                            {cust.phone}
                           </div>
                         )}
                       </TableCell>
+
                       <TableCell className="truncate max-w-[220px]" title={services.join(", ")}>
                         {services.map((s, i) => (
-                          <div key={`${b.id}-${i}`} className="text-xs text-muted-foreground truncate">
+                          <div
+                            key={`${b.id}-${i}`}
+                            className="text-xs text-muted-foreground truncate"
+                          >
                             {s}
                           </div>
                         ))}
                       </TableCell>
+
                       <TableCell className="truncate max-w-[160px]" title={prov.name}>
                         {prov.name || "—"}
                       </TableCell>
+
                       <TableCell className="whitespace-nowrap">{fmtDate(b.date)}</TableCell>
                       <TableCell className="whitespace-nowrap">{fmtDate(b.timeSlot)}</TableCell>
+
                       <TableCell>
                         <Badge className={statusColors[b.status ?? ""] || statusColors.default}>
                           {(b.status ?? "—").replace("_", " ")}
                         </Badge>
                       </TableCell>
+
                       <TableCell>₹{amountPaid(b).toLocaleString()}</TableCell>
+
                       <TableCell className="truncate max-w-[150px]" title={b.bookingAddress}>
                         {b.bookingAddress || "—"}
                       </TableCell>
+
                       <TableCell>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setSelectedBooking(b);
-                            setDetailsOpen(true);
+                            setSelectedBooking(b)
+                            setDetailsOpen(true)
                           }}
                         >
                           View
@@ -408,27 +476,40 @@ useEffect(() => {
           </Table>
         </div>
 
-        {/* Pagination */}
         <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-2">
           <div className="text-sm text-muted-foreground">
             Page {currentPage} of {totalPages || 1}
             {filteredBookings.length > 0 && (
               <span className="ml-2">
-                ({((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredBookings.length)} of {filteredBookings.length})
+                ({(currentPage - 1) * PAGE_SIZE + 1}-
+                {Math.min(currentPage * PAGE_SIZE, filteredBookings.length)} of{" "}
+                {filteredBookings.length})
               </span>
             )}
           </div>
+
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => p - 1)} disabled={!hasPrev}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => p - 1)}
+              disabled={!hasPrev}
+            >
               Prev
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => p + 1)} disabled={!hasNext}>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => p + 1)}
+              disabled={!hasNext}
+            >
               Next
             </Button>
           </div>
         </div>
       </CardContent>
-      
+
       {selectedBooking && (
         <DetailsSheet
           open={detailsOpen}

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Clock, Star, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchTopCategories, type TopCategory } from "@/lib/queries/top-services";
 import { fetchMostBookedSlots, type TimeSlot } from "@/lib/queries/most-booked-slots";
-import { fetchNewVsRepeatCustomers } from "@/lib/queries/customer-insights";
+import { fetchCustomerStats } from "@/lib/queries/customers";
 
 type TimeSlotWithPercentage = TimeSlot & { percentage: number };
 
@@ -55,11 +55,13 @@ export function PerformanceMetrics({
 
     const loadCustomerCounts = async () => {
       try {
-        const data = await fetchNewVsRepeatCustomers(fromDate, toDate);
-        setRepeatCustomerCount(data.repeatCustomerCount);
-        setNewCustomerCount(data.newCustomerCount);
-        setAverageRating(data.averageRating);
-        setTotalRatings(data.totalRatings);
+        const data = await fetchCustomerStats(fromDate, toDate);
+
+        setRepeatCustomerCount(data.customersWithMultipleBookings);
+        setNewCustomerCount(data.customersWithOneBooking);
+
+        setAverageRating(0);
+        setTotalRatings(0);
       } catch (error) {
         console.error("Error fetching customer counts:", error);
       }
@@ -81,7 +83,8 @@ export function PerformanceMetrics({
     (peakHoursPage - 1) * ITEMS_PER_PAGE,
     peakHoursPage * ITEMS_PER_PAGE
   );
-const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {/* Peak Hours */}
@@ -171,65 +174,64 @@ const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
             <p className="text-sm text-muted-foreground">No bookings found</p>
           ) : (
             <div className="space-y-3">
-{paginatedCategories.map((category, index) => (
-  <div
-    key={index}
-    className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50"
-    onClick={() =>
-      setExpandedCategory(
-        expandedCategory === category.categoryName
-          ? null
-          : category.categoryName
-      )
-    }
-  >
-    {/* Header */}
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-semibold text-muted-foreground">
-          {category.categoryName}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Most Booked: {category.mostBookedService}
-        </p>
-      </div>
+              {paginatedCategories.map((category, index) => (
+                <div
+                  key={index}
+                  className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50"
+                  onClick={() =>
+                    setExpandedCategory(
+                      expandedCategory === category.categoryName
+                        ? null
+                        : category.categoryName
+                    )
+                  }
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-muted-foreground">
+                        {category.categoryName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Most Booked: {category.mostBookedService}
+                      </p>
+                    </div>
 
-      <div className="text-right">
-        <p className="text-sm font-bold text-green-600">
-          ₹{category.totalRevenue.toLocaleString("en-IN")}
-        </p>
-        <Badge variant="outline" className="text-xs mt-1">
-          {category.totalBookings}
-        </Badge>
-      </div>
-    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-green-600">
+                        ₹{category.totalRevenue.toLocaleString("en-IN")}
+                      </p>
+                      <Badge variant="outline" className="text-xs mt-1">
+                        {category.totalBookings}
+                      </Badge>
+                    </div>
+                  </div>
 
-    {/* Expandable Services */}
-    {expandedCategory === category.categoryName && (
-      <div className="mt-3 border-t pt-3 space-y-2">
-        {category.services.map((service, i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between text-xs"
-          >
-            <span className="text-muted-foreground">
-              {service.serviceName}
-            </span>
-            <div className="flex gap-3">
-              <span className="text-green-600 font-medium">
-                ₹{service.revenue.toLocaleString("en-IN")}
-              </span>
-              <Badge variant="secondary">
-                {service.bookings}
-              </Badge>
-            </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-))}
-
+                  {/* Expandable Services */}
+                  {expandedCategory === category.categoryName && (
+                    <div className="mt-3 border-t pt-3 space-y-2">
+                      {category.services.map((service, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between text-xs"
+                        >
+                          <span className="text-muted-foreground">
+                            {service.serviceName}
+                          </span>
+                          <div className="flex gap-3">
+                            <span className="text-green-600 font-medium">
+                              ₹{service.revenue.toLocaleString("en-IN")}
+                            </span>
+                            <Badge variant="secondary">
+                              {service.bookings}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
 
               {/* Pagination Controls */}
               {totalCategoriesPages > 1 && (
