@@ -226,7 +226,7 @@ export async function fetchBookingStats(
     const walletAmountUsed = Number(d.walletAmountUsed || 0);
     const discountAmount = Number(d.discount_amount || 0);
 
-    const walletOfferAmount = Math.min(walletAmountUsed, setWalletAmountTo);
+    const walletOfferAmount = Math.min(walletAmountUsed, 300);
 
     completedDocsData.push({
       amount_paid: amountPaid,
