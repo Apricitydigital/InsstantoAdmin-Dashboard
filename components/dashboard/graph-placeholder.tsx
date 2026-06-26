@@ -1,7 +1,13 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { LucideIcon, ChevronLeft, ChevronRight } from "lucide-react"
 import {
   LineChart,
@@ -47,31 +53,59 @@ export function GraphPlaceholder({
   className = "",
 }: GraphPlaceholderProps) {
   const [data, setData] = useState<RevenuePoint[]>([])
-  const [monthOffset, setMonthOffset] = useState(0) // 👈 Shift by 6 months per click
+  const [monthOffset, setMonthOffset] = useState(0)
 
   const fetchRevenueData = async (offset: number) => {
     const db = getFirestoreDb()
 
     const providerRefs = PROVIDER_ID_LIST.map((id) => doc(db, "customer", id))
 
+    let setWalletAmountTo = 0
+
+    const walletConfigSnap = await getDocs(
+      collection(db, "adminAddamountinWallet")
+    )
+
+    if (!walletConfigSnap.empty) {
+      const walletConfig = walletConfigSnap.docs[0].data() as any
+      setWalletAmountTo = Number(walletConfig.SetWalletAmountTo || 0)
+    }
+
+    console.log("Revenue Graph Wallet Config:", {
+      setWalletAmountTo,
+    })
+
     const now = new Date()
-    // Calculate date range based on offset
-    const startOldest = new Date(now.getFullYear(), now.getMonth() - 5 - offset, 1)
-    const endNewest = new Date(now.getFullYear(), now.getMonth() + 1 - offset, 1)
 
     const monthBuckets = Array.from({ length: 6 }, (_, i) => {
-      const start = new Date(now.getFullYear(), now.getMonth() - 5 - offset + i, 1)
-      const end = new Date(now.getFullYear(), now.getMonth() - 4 - offset + i, 1)
-      const label = start.toLocaleString("default", { month: "short", year: "2-digit" })
+      const start = new Date(
+        now.getFullYear(),
+        now.getMonth() - 5 - offset + i,
+        1
+      )
+
+      const end = new Date(
+        now.getFullYear(),
+        now.getMonth() - 4 - offset + i,
+        1
+      )
+
+      const label = start.toLocaleString("default", {
+        month: "short",
+        year: "2-digit",
+      })
+
       return { label, start, end }
     })
 
     const bookingsRef = collection(db, "bookings")
+
     const q = query(
       bookingsRef,
       where("provider_id", "in", providerRefs),
       where("status", "==", "Service_Completed")
     )
+
     const snap = await getDocs(q)
 
     const revenueByMonth: RevenuePoint[] = monthBuckets.map((m) => ({
@@ -84,33 +118,82 @@ export function GraphPlaceholder({
 
     snap.forEach((docSnap) => {
       const b = docSnap.data() as any
-      const when: Date = b?.timeSlot?.toDate ? b.timeSlot.toDate() : new Date(b.timeSlot)
+
+      const when: Date | null = b?.date?.toDate?.() || null
       if (!when) return
 
       const amt = Number(b?.amount_paid ?? 0) || 0
       const wallet = Number(b?.walletAmountUsed ?? 0) || 0
       const discount = Number(b?.discount_amount ?? 0) || 0
 
+      const walletOfferAmount = Math.min(wallet, setWalletAmountTo)
+
+      const bookingNetRevenue = amt - walletOfferAmount - discount
+
       const idx = monthBuckets.findIndex((m) => when >= m.start && when < m.end)
+
       if (idx !== -1) {
         revenueByMonth[idx].revenue += amt
-        revenueByMonth[idx].walletUsed += wallet
+        revenueByMonth[idx].walletUsed += walletOfferAmount
         revenueByMonth[idx].discount += discount
-        revenueByMonth[idx].netRevenue += amt - wallet - discount
+        revenueByMonth[idx].netRevenue += bookingNetRevenue
+
+        console.log("Revenue Graph Debug:", {
+          bookingId: docSnap.id,
+          month: revenueByMonth[idx].month,
+          amountPaid: amt,
+          walletAmountUsed: wallet,
+          setWalletAmountTo,
+          walletOfferAmount,
+          discountAmount: discount,
+          bookingNetRevenue,
+          date: when.toLocaleString("en-IN"),
+          providerId: b?.provider_id?.id,
+          customerId: b?.customer_id?.id,
+        })
       }
     })
 
     const withChanges: RevenuePoint[] = revenueByMonth.map((d, i, arr) => {
-      if (i === 0) return { ...d, changePct: null, changeDir: "flat", changeLabel: "—" }
+      if (i === 0) {
+        return {
+          ...d,
+          changePct: null,
+          changeDir: "flat",
+          changeLabel: "—",
+        }
+      }
+
       const prev = arr[i - 1].revenue
-      if (prev <= 0) return { ...d, changePct: null, changeDir: "flat", changeLabel: "—" }
+
+      if (prev <= 0) {
+        return {
+          ...d,
+          changePct: null,
+          changeDir: "flat",
+          changeLabel: "—",
+        }
+      }
 
       const pct = ((d.revenue - prev) / prev) * 100
-      const roundedAbs = Math.abs(pct) < 10 ? Math.round(Math.abs(pct) * 10) / 10 : Math.round(Math.abs(pct))
-      const dir: "up" | "down" | "flat" = pct > 0 ? "up" : pct < 0 ? "down" : "flat"
+
+      const roundedAbs =
+        Math.abs(pct) < 10
+          ? Math.round(Math.abs(pct) * 10) / 10
+          : Math.round(Math.abs(pct))
+
+      const dir: "up" | "down" | "flat" =
+        pct > 0 ? "up" : pct < 0 ? "down" : "flat"
+
       const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "–"
       const label = dir === "flat" ? "0%" : `${arrow} ${roundedAbs}%`
-      return { ...d, changePct: pct, changeDir: dir, changeLabel: label }
+
+      return {
+        ...d,
+        changePct: pct,
+        changeDir: dir,
+        changeLabel: label,
+      }
     })
 
     setData(withChanges)
@@ -129,12 +212,27 @@ export function GraphPlaceholder({
 
   const renderChangeLabel = (props: any) => {
     const { x, y, index, value } = props
+
     if (value == null || index == null) return null
+
     const point: RevenuePoint | undefined = data[index]
+
     const color =
-      point?.changeDir === "up" ? "#16a34a" : point?.changeDir === "down" ? "#dc2626" : "#6b7280"
+      point?.changeDir === "up"
+        ? "#16a34a"
+        : point?.changeDir === "down"
+          ? "#dc2626"
+          : "#6b7280"
+
     return (
-      <text x={x} y={y - 12} textAnchor="middle" fontSize={12} fontWeight={600} fill={color}>
+      <text
+        x={x}
+        y={y - 12}
+        textAnchor="middle"
+        fontSize={12}
+        fontWeight={600}
+        fill={color}
+      >
         {value}
       </text>
     )
@@ -143,6 +241,7 @@ export function GraphPlaceholder({
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const p = payload[0].payload as RevenuePoint
+
       const change =
         p?.changeDir === "up"
           ? `▲ ${Math.abs(p.changePct ?? 0).toFixed(1)}%`
@@ -153,13 +252,26 @@ export function GraphPlaceholder({
       return (
         <div className="bg-white border border-gray-300 p-2 rounded shadow">
           <p className="font-semibold">Month: {label}</p>
+
           <p style={{ color: "#8884d8" }}>
             Revenue: {formatCurrency(p.revenue)} ({change})
           </p>
-          <p style={{ color: "#8884d8" }}>Net Revenue: {formatCurrency(p.netRevenue)}</p>
+
+          <p style={{ color: "#8884d8" }}>
+            Wallet Offer Used: {formatCurrency(p.walletUsed)}
+          </p>
+
+          <p style={{ color: "#8884d8" }}>
+            Discount: {formatCurrency(p.discount)}
+          </p>
+
+          <p style={{ color: "#8884d8" }}>
+            Net Revenue: {formatCurrency(p.netRevenue)}
+          </p>
         </div>
       )
     }
+
     return null
   }
 
@@ -174,10 +286,10 @@ export function GraphPlaceholder({
               <Icon className={`h-5 w-5 ${iconColor.replace("/50", "")}`} />
               {title}
             </CardTitle>
+
             <CardDescription>{description}</CardDescription>
           </div>
 
-          {/* 👇 Month Navigation Buttons */}
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -187,10 +299,13 @@ export function GraphPlaceholder({
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
+
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setMonthOffset((prev) => (prev > 0 ? prev - 6 : 0))}
+              onClick={() =>
+                setMonthOffset((prev) => (prev > 0 ? prev - 6 : 0))
+              }
               disabled={monthOffset === 0}
               title="Next 6 months"
             >
@@ -204,17 +319,31 @@ export function GraphPlaceholder({
         {children || (
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 40, right: 30, left: 20, bottom: 5 }}>
+              <LineChart
+                data={data}
+                margin={{ top: 40, right: 30, left: 20, bottom: 5 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
+
                 <XAxis dataKey="month" />
-                <YAxis tickFormatter={(v) => formatCurrency(v).replace("₹", "₹ ")} />
+
+                <YAxis
+                  tickFormatter={(v) => formatCurrency(v).replace("₹", "₹ ")}
+                />
+
                 <Tooltip content={<CustomTooltip />} />
+
                 <Line
                   type="monotone"
                   dataKey="revenue"
                   stroke="#8884d8"
                   strokeWidth={3}
-                  dot={{ r: 6, stroke: "#8884d8", strokeWidth: 2, fill: "#8884d8" }}
+                  dot={{
+                    r: 6,
+                    stroke: "#8884d8",
+                    strokeWidth: 2,
+                    fill: "#8884d8",
+                  }}
                   activeDot={{ r: 7 }}
                 >
                   <LabelList dataKey="changeLabel" content={renderChangeLabel} />
