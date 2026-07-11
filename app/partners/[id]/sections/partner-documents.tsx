@@ -13,8 +13,8 @@ interface PartnerDocumentsSectionProps {
 
 type DocumentFields = {
   photo?: string
-  aadhaarFront?: string
-  aadhaarBack?: string
+  adhaarFront?: string
+  adhaarBack?: string
   panCard?: string
   bankPassbook?: string
   policeVerification?: string
@@ -54,8 +54,8 @@ export function PartnerDocumentsSection({ partnerId }: PartnerDocumentsSectionPr
           const data = snapshot.docs[0].data()
           setDocs({
             photo: data.photo || null,
-            aadhaarFront: data.aadhaarFront || null,
-            aadhaarBack: data.aadhaarBack || null,
+            adhaarFront: data.adhaarFront || null,
+            adhaarBack: data.adhaarBack || null,
             panCard: data.panCard || null,
             bankPassbook: data.bankPassbook || null,
             policeVerification: data.policeVerification || null,
@@ -138,12 +138,12 @@ export function PartnerDocumentsSection({ partnerId }: PartnerDocumentsSectionPr
                 {renderImage(docs?.photo)}
               </div>
               <div>
-                <p className="font-medium mb-2 text-sm">Aadhaar Front</p>
-                {renderImage(docs?.aadhaarFront)}
+                <p className="font-medium mb-2 text-sm">Adhaar Front</p>
+                {renderImage(docs?.adhaarFront)}
               </div>
               <div>
-                <p className="font-medium mb-2 text-sm">Aadhaar Back</p>
-                {renderImage(docs?.aadhaarBack)}
+                <p className="font-medium mb-2 text-sm">Adhaar Back</p>
+                {renderImage(docs?.adhaarBack)}
               </div>
             </div>
           </div>

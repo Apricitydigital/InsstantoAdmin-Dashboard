@@ -162,16 +162,25 @@ export function DetailsSheet({
             <DetailBlock label="Partner Fare" value={`₹${booking.partner_fare?.toLocaleString() || 0}`} />
             <DetailBlock label="Status" value={booking.status?.replace("_", " ")} />
 
-            <DetailBlock
-              label="Date"
-              value={booking.date?.toDate?.().toLocaleString("en-IN")}
-            />
+<DetailBlock
+  label="Date"
+  value={booking.date?.toDate?.().toLocaleString("en-IN")}
+/>
 
-            <DetailBlock
-              label="Time Slot"
-              value={booking.timeSlot?.toDate?.().toLocaleString("en-IN")}
-            />
+<DetailBlock
+  label="Time Slot"
+  value={booking.timeSlot?.toDate?.().toLocaleString("en-IN")}
+/>
 
+<DetailBlock
+  label="Start Time"
+  value={booking.startTime?.toDate?.().toLocaleString("en-IN")}
+/>
+
+<DetailBlock
+  label="End Time"
+  value={booking.endTime?.toDate?.().toLocaleString("en-IN")}
+/>
             <hr className="my-3 opacity-40" />
 
             {/* LOADING STATE */}
