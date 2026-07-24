@@ -1,6 +1,5 @@
 import {
     collection,
-    getCountFromServer,
     query,
     where,
     doc,
@@ -8,8 +7,9 @@ import {
     Timestamp
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
+import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
 
+const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
 
 export type BookingStats = {
     totalBookings: number
@@ -26,12 +26,10 @@ export type BookingStats = {
 
 export async function fetchBookingStats(fromDate?: string, toDate?: string): Promise<BookingStats> {
     const db = getFirestoreDb()
-
     const customerRefs = PROVIDER_ID_LIST.map(id => doc(db, "customer", id))
     const bookingsCol = collection(db, "bookings")
     const reviewsCol = collection(db, "reviews")
 
-    // ✅ Build date filters (local timezone, no UTC offset to avoid extra day)
     const filters: any[] = []
     if (fromDate) {
         const startDate = new Date(fromDate + "T00:00:00")
@@ -42,72 +40,46 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
         filters.push(where("date", "<=", Timestamp.fromDate(endDate)))
     }
 
-    // ✅ Append common filters dynamically
-    const qWithFilters = (...clauses: any[]) => query(bookingsCol, ...filters, ...clauses)
+    // Match the booking table's default "Real Booking" filter exactly.
+    const bookingSnapshot = await getDocs(query(bookingsCol, ...filters))
+    const realBookings = bookingSnapshot.docs
+        .map(bookingDoc => bookingDoc.data() as {
+            provider_id?: { id?: string } | null
+            customer_id?: { id?: string } | null
+            status?: string
+            amount_paid?: number
+        })
+        .filter(booking => {
+            const providerId = booking.provider_id?.id
+            const customerId = booking.customer_id?.id
 
-    // Queries with date range applied
-    const totalBookingsQuery = qWithFilters(where("provider_id", "in", customerRefs))
-    const pendingQuery = qWithFilters(where("status", "==", "Pending"))
-    const confirmedQuery = qWithFilters(
-        where("provider_id", "in", customerRefs),
-        where("status", "==", "Accepted")
+            return !!providerId &&
+                PROVIDER_ID_LIST.includes(providerId as any) &&
+                customerId !== INTERNAL_CUSTOMER_ID
+        })
+
+    const total = realBookings.length
+    const pending = realBookings.filter(booking => booking.status === "Pending").length
+    const confirmed = realBookings.filter(booking => booking.status === "Accepted").length
+    const completedBookings = realBookings.filter(
+        booking => booking.status === "Service_Completed"
     )
-    const completedQuery = qWithFilters(
-        where("provider_id", "in", customerRefs),
-        where("status", "==", "Service_Completed")
-    )
-    const cancelledQuery = qWithFilters(
-        where("provider_id", "in", customerRefs),
-        where("status", "==", "Cancelled")
-    )
-    const cancelledByCustomerQuery = qWithFilters(
-        where("provider_id", "in", customerRefs),
-        where("status", "==", "Cancelled")
+    const completed = completedBookings.length
+    const cancelled = realBookings.filter(booking => booking.status === "Cancelled").length
+    const cancelledByCustomer = cancelled
+    const totalRevenue = completedBookings.reduce(
+        (sum, booking) => sum + (booking.amount_paid || 0),
+        0
     )
 
-    const [
-        totalSnapshot,
-        pendingSnap,
-        confirmedSnap,
-        completedSnap,
-        cancelledSnap,
-        cancelledByCustomerSnap,
-    ] = await Promise.all([
-        getCountFromServer(totalBookingsQuery),
-        getCountFromServer(pendingQuery),
-        getCountFromServer(confirmedQuery),
-        getCountFromServer(completedQuery),
-        getCountFromServer(cancelledQuery),
-        getCountFromServer(cancelledByCustomerQuery),
-    ])
-
-    const total = Number(totalSnapshot.data().count || 0)
-    const pending = Number(pendingSnap.data().count || 0)
-    const confirmed = Number(confirmedSnap.data().count || 0)
-    const completed = Number(completedSnap.data().count || 0)
-    const cancelled = Number(cancelledSnap.data().count || 0)
-    const cancelledByCustomer = Number(cancelledByCustomerSnap.data().count || 0)
-
-    // 💰 Calculate revenue
-    const completedBookingsSnapshot = await getDocs(completedQuery)
-    let totalRevenue = 0
-    completedBookingsSnapshot.forEach(d => {
-        const data = d.data() as { amount_paid?: number }
-        totalRevenue += data.amount_paid || 0
-    })
-
-    // ⭐ Fetch real partner ratings (no date filter applied to reviews)
-    const reviewsQuery = query(
-        reviewsCol,
-        where("partnerId", "in", customerRefs)
-    )
+    // Ratings remain all-time because the booking table has no review-date filter.
+    const reviewsQuery = query(reviewsCol, where("partnerId", "in", customerRefs))
     const reviewSnap = await getDocs(reviewsQuery)
 
     let totalRating = 0
     let ratingCount = 0
-
-    reviewSnap.forEach(r => {
-        const data = r.data() as { partnerRating?: number }
+    reviewSnap.forEach(review => {
+        const data = review.data() as { partnerRating?: number }
         if (data.partnerRating && data.partnerRating > 0) {
             totalRating += data.partnerRating
             ratingCount++

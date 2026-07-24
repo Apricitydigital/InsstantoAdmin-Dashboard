@@ -172,7 +172,7 @@ export default function DashboardPage() {
             {/* ---- Charts ---- */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <ChartPlaceholder title="Monthly Bookings Trend" description="Booking volume over the selected range" icon={BarChart3} iconColor="text-primary" className="col-span-2" />
-              <GraphPlaceholder title="Revenue Distribution" description="Revenue by service category" icon={Activity} iconColor="text-secondary" className="col-span-2" />
+              <GraphPlaceholder title="Monthly Revenue Trend" description="Revenue from real completed bookings" icon={Activity} iconColor="text-secondary" className="col-span-2" />
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <PnLGraph title="Net Profit & Loss Overview" description="Monthly earnings, expenses, and overall profit or loss trend" icon={BarChart3} className="col-span-2" />

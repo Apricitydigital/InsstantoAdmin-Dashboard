@@ -13,7 +13,6 @@ import {
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   query,
   onSnapshot,
@@ -49,7 +48,6 @@ export function DetailsSheet({
   const db = getFirestoreDb()
 
   const [detailData, setDetailData] = useState<any>(null)
-  const [bookingDocData, setBookingDocData] = useState<any>(null)
 
   const [loading, setLoading] = useState(false)
 
@@ -61,24 +59,6 @@ export function DetailsSheet({
   // ----------------------------------------------------
   useEffect(() => {
     if (!booking?.id || !open) return
-
-    const fetchBookingDocument = async () => {
-      try {
-        const bookingDocRef = doc(db, "bookings", booking.id)
-        const bookingSnapshot = await getDoc(bookingDocRef)
-
-        if (bookingSnapshot.exists()) {
-          setBookingDocData(bookingSnapshot.data())
-        } else {
-          setBookingDocData(null)
-        }
-      } catch (error) {
-        console.error("Booking document fetch error:", error)
-        setBookingDocData(null)
-      }
-    }
-
-    fetchBookingDocument()
 
     setLoading(true)
 
@@ -181,10 +161,6 @@ export function DetailsSheet({
             />
             <DetailBlock label="Partner Fare" value={`₹${booking.partner_fare?.toLocaleString() || 0}`} />
             <DetailBlock label="Status" value={booking.status?.replace("_", " ")} />
-
-            {typeof bookingDocData?.cancelReason === "string" && bookingDocData.cancelReason.trim() !== "" && (
-              <DetailBlock label="Cancel Reason" value={bookingDocData.cancelReason} />
-            )}
 
 
 

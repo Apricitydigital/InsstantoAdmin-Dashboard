@@ -98,6 +98,7 @@ type DateRange = {
 
 const MAX_FIRESTORE_IN_VALUES = 30
 const CACHE_DURATION_MS = 5 * 60 * 1000
+const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
 
 const EXPENSE_SHEET_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vSzu4Xj2cluOSQ7-eT9VNvEkZu_3ghcImdSWYTWq2181-0M7OV16a2GN70WcC7DnagsrkZFfDeJioJo/pub?output=csv"
@@ -500,7 +501,8 @@ function filterBookingsByStatus(
 }
 
 function calculateRevenueData(
-  completedBookings: BookingData[]
+  completedBookings: BookingData[],
+  walletOfferLimit: number
 ) {
   let totalRevenue = 0
   let walletOfferAmount = 0
@@ -515,7 +517,7 @@ function calculateRevenueData(
       toNumber(
         booking.walletAmountUsed
       ),
-      300
+      walletOfferLimit
     )
 
     const discount = toNumber(
@@ -549,6 +551,22 @@ function calculateRevenueData(
     netRevenue,
     perOrderValue,
   }
+}
+
+async function fetchWalletOfferLimit(): Promise<number> {
+  const db = getFirestoreDb()
+  const walletConfigSnapshot = await getDocs(
+    collection(db, "adminAddamountinWallet")
+  )
+
+  if (walletConfigSnapshot.empty) {
+    return 0
+  }
+
+  return toNumber(
+    walletConfigSnapshot.docs[0].data()
+      .SetWalletAmountTo
+  )
 }
 
 // ============================================================
@@ -1024,6 +1042,7 @@ export async function fetchBookingStats(
     previousCustomerCount,
     expenseByMonth,
     pnlRows,
+    walletOfferLimit,
   ] = await Promise.all([
     fetchBookingsForRange(
       providerReferences,
@@ -1064,19 +1083,45 @@ export async function fetchBookingStats(
         return []
       }
     ),
+
+    fetchWalletOfferLimit().catch(
+      (error) => {
+        console.error(
+          "Error loading wallet offer limit:",
+          error
+        )
+
+        return 0
+      }
+    ),
   ])
 
+  // Match the booking table's default "Real Booking" filter by excluding
+  // bookings made by the internal customer account. Provider filtering is
+  // already applied by fetchBookingsForRange above.
   const currentBookings =
-    currentBookingDocuments.map(
-      (bookingDocument) =>
-        bookingDocument.data() as BookingData
-    )
+    currentBookingDocuments
+      .map(
+        (bookingDocument) =>
+          bookingDocument.data() as BookingData
+      )
+      .filter(
+        (booking) =>
+          booking.customer_id?.id !==
+          INTERNAL_CUSTOMER_ID
+      )
 
   const previousBookings =
-    previousBookingDocuments.map(
-      (bookingDocument) =>
-        bookingDocument.data() as BookingData
-    )
+    previousBookingDocuments
+      .map(
+        (bookingDocument) =>
+          bookingDocument.data() as BookingData
+      )
+      .filter(
+        (booking) =>
+          booking.customer_id?.id !==
+          INTERNAL_CUSTOMER_ID
+      )
 
   // ----------------------------------------------------------
   // CURRENT STATUS COUNTS
@@ -1129,12 +1174,14 @@ export async function fetchBookingStats(
 
   const currentRevenue =
     calculateRevenueData(
-      completedBookingData
+      completedBookingData,
+      walletOfferLimit
     )
 
   const previousRevenue =
     calculateRevenueData(
-      previousCompletedBookingData
+      previousCompletedBookingData,
+      walletOfferLimit
     )
 
   // ----------------------------------------------------------

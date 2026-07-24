@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { LucideIcon, ChevronLeft, ChevronRight } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from "recharts"
-import { doc, collection, query, where, getDocs } from "firebase/firestore"
+import { doc, collection, query, where, getDocs, Timestamp } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
 import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
@@ -20,6 +20,11 @@ interface BookingData {
   month: string
   bookings: number
 }
+
+const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
+
+const monthKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
 
 export function ChartPlaceholder({
   title,
@@ -44,31 +49,55 @@ export function ChartPlaceholder({
       return date
     })
 
-    const months = monthsAgo.map((date) => date.toLocaleString("default", { month: "short", year: "2-digit" }))
-    const reversedMonths = [...months].reverse()
+    const visibleMonths = [...monthsAgo].reverse()
+    const rangeStart = new Date(
+      visibleMonths[0].getFullYear(),
+      visibleMonths[0].getMonth(),
+      1
+    )
+    const lastMonth = visibleMonths[visibleMonths.length - 1]
+    const rangeEnd = new Date(
+      lastMonth.getFullYear(),
+      lastMonth.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999
+    )
 
     const bookingsCol = collection(db, "bookings")
     const bookingsQuery = query(
       bookingsCol,
       where("provider_id", "in", customerRefs),
-      where("status", "==", "Service_Completed")
+      where("status", "==", "Service_Completed"),
+      where("date", ">=", Timestamp.fromDate(rangeStart)),
+      where("date", "<=", Timestamp.fromDate(rangeEnd))
     )
     const snapshot = await getDocs(bookingsQuery)
 
-    const bookingsCount = reversedMonths.map((month) => ({
-      month,
+    const bookingsCount = visibleMonths.map((date) => ({
+      month: date.toLocaleString("default", { month: "short", year: "2-digit" }),
+      key: monthKey(date),
       bookings: 0,
     }))
 
-    snapshot.forEach((doc) => {
-      const data = doc.data()
+    snapshot.forEach((bookingDocument) => {
+      const data = bookingDocument.data()
+      if (data.customer_id?.id === INTERNAL_CUSTOMER_ID) return
+
       const bookingDate = data.date?.toDate?.()
-      const monthName = bookingDate.toLocaleString("default", { month: "short", year: "2-digit" })
-      const monthIndex = reversedMonths.indexOf(monthName)
+      if (!bookingDate) return
+
+      const monthIndex = bookingsCount.findIndex(
+        (month) => month.key === monthKey(bookingDate)
+      )
       if (monthIndex !== -1) bookingsCount[monthIndex].bookings += 1
     })
 
-    setBookingsData(bookingsCount)
+    setBookingsData(
+      bookingsCount.map(({ month, bookings }) => ({ month, bookings }))
+    )
   }
 
   useEffect(() => {

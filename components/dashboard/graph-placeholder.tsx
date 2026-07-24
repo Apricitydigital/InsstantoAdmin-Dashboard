@@ -19,7 +19,7 @@ import {
   ResponsiveContainer,
   LabelList,
 } from "recharts"
-import { collection, query, where, getDocs, doc } from "firebase/firestore"
+import { collection, query, where, getDocs, doc, Timestamp, limit } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
 import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
@@ -44,6 +44,8 @@ type RevenuePoint = {
   changeLabel?: string
 }
 
+const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
+
 export function GraphPlaceholder({
   title,
   description,
@@ -60,42 +62,27 @@ export function GraphPlaceholder({
 
     const providerRefs = PROVIDER_ID_LIST.map((id) => doc(db, "customer", id))
 
-    let setWalletAmountTo = 0
-
-    const walletConfigSnap = await getDocs(
-      collection(db, "adminAddamountinWallet")
-    )
-
-    if (!walletConfigSnap.empty) {
-      const walletConfig = walletConfigSnap.docs[0].data() as any
-      setWalletAmountTo = Number(walletConfig.SetWalletAmountTo || 0)
-    }
-
-    console.log("Revenue Graph Wallet Config:", {
-      setWalletAmountTo,
-    })
-
     const now = new Date()
-
     const monthBuckets = Array.from({ length: 6 }, (_, i) => {
       const start = new Date(
         now.getFullYear(),
         now.getMonth() - 5 - offset + i,
         1
       )
-
       const end = new Date(
         now.getFullYear(),
         now.getMonth() - 4 - offset + i,
         1
       )
 
-      const label = start.toLocaleString("default", {
-        month: "short",
-        year: "2-digit",
-      })
-
-      return { label, start, end }
+      return {
+        label: start.toLocaleString("default", {
+          month: "short",
+          year: "2-digit",
+        }),
+        start,
+        end,
+      }
     })
 
     const bookingsRef = collection(db, "bookings")
@@ -103,10 +90,23 @@ export function GraphPlaceholder({
     const q = query(
       bookingsRef,
       where("provider_id", "in", providerRefs),
-      where("status", "==", "Service_Completed")
+      where("date", ">=", Timestamp.fromDate(monthBuckets[0].start)),
+      where(
+        "date",
+        "<",
+        Timestamp.fromDate(monthBuckets[monthBuckets.length - 1].end)
+      )
     )
 
-    const snap = await getDocs(q)
+    // Both reads are independent, so start them together to reduce load time.
+    const [snap, walletConfigSnap] = await Promise.all([
+      getDocs(q),
+      getDocs(query(collection(db, "adminAddamountinWallet"), limit(1))),
+    ])
+
+    const setWalletAmountTo = walletConfigSnap.empty
+      ? 0
+      : Number(walletConfigSnap.docs[0].data().SetWalletAmountTo || 0)
 
     const revenueByMonth: RevenuePoint[] = monthBuckets.map((m) => ({
       month: m.label,
@@ -118,6 +118,8 @@ export function GraphPlaceholder({
 
     snap.forEach((docSnap) => {
       const b = docSnap.data() as any
+      if (b?.status !== "Service_Completed") return
+      if (b?.customer_id?.id === INTERNAL_CUSTOMER_ID) return
 
       const when: Date | null = b?.date?.toDate?.() || null
       if (!when) return
@@ -138,19 +140,6 @@ export function GraphPlaceholder({
         revenueByMonth[idx].discount += discount
         revenueByMonth[idx].netRevenue += bookingNetRevenue
 
-        console.log("Revenue Graph Debug:", {
-          bookingId: docSnap.id,
-          month: revenueByMonth[idx].month,
-          amountPaid: amt,
-          walletAmountUsed: wallet,
-          setWalletAmountTo,
-          walletOfferAmount,
-          discountAmount: discount,
-          bookingNetRevenue,
-          date: when.toLocaleString("en-IN"),
-          providerId: b?.provider_id?.id,
-          customerId: b?.customer_id?.id,
-        })
       }
     })
 
