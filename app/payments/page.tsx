@@ -137,7 +137,7 @@ export default function PaymentsPage() {
       <div className="flex flex-1 flex-col">
         <AdminHeader title="Payment Management" />
 
-        <main className="flex-1 space-y-6 p-6">
+        <main className="min-w-0 flex-1 space-y-6 p-4 sm:p-6">
           <div className="space-y-6">
             {/* Filters */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">

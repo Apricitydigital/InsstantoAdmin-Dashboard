@@ -80,24 +80,27 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur px-4 lg:h-[60px] lg:px-6">
+    <header
+      data-admin-header
+      className="fixed top-0 right-0 left-0 z-40 flex h-14 min-h-14 items-center gap-2 border-b bg-background/95 px-3 pl-16 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:gap-3 sm:px-4 sm:pl-16 lg:left-[var(--admin-sidebar-width,256px)] lg:h-[60px] lg:min-h-[60px] lg:px-6"
+    >
       {/* Title */}
-      <div className="flex-1">
-        <h1 className="text-lg font-semibold md:text-2xl">{title}</h1>
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-base font-semibold sm:text-lg md:text-xl xl:text-2xl">{title}</h1>
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         {/* 🔔 Notifications */}
         <Popover>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
               size="icon"
-              className="relative bg-transparent"
+              className="relative size-9 bg-transparent p-0"
               title="Notifications"
             >
-              <Bell className="h-4 w-4" />
+              <Bell className="size-4" />
 
               {notifications.length > 0 && (
                 <Badge className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full px-1 text-xs bg-red-500 text-white">
@@ -107,7 +110,7 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
             </Button>
           </PopoverTrigger>
 
-          <PopoverContent align="end" className="w-80 p-0">
+          <PopoverContent align="end" className="w-[min(20rem,calc(100vw-1rem))] p-0">
             <div className="border-b px-4 py-2 font-semibold">
               Notifications
             </div>
@@ -139,8 +142,8 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
         {/* 👤 User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon">
-              <User className="h-4 w-4" />
+            <Button variant="outline" size="icon" className="size-9 p-0">
+              <User className="size-4" />
             </Button>
           </DropdownMenuTrigger>
 

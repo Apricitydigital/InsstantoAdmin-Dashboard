@@ -122,5 +122,106 @@
   }
   body {
     @apply bg-background text-foreground font-body; /* Added font-body class */
+    min-width: 320px;
+    overflow-x: hidden;
+  }
+
+  html {
+    overflow-x: hidden;
+  }
+
+  img, svg, video, canvas {
+    max-width: 100%;
+  }
+}
+
+@layer utilities {
+  /* Prevent flex/grid children and dashboard cards from widening the viewport. */
+  main, main > *, [data-slot="tabs"], [data-slot="tabs-content"], [data-slot="card"] {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  [data-slot="table-container"] {
+    scrollbar-width: thin;
+  }
+
+  body > div, body > div > div {
+    min-width: 0;
+  }
+
+  /* Admin headers must start at the viewport edge and remain above page content. */
+  div:has(> [data-admin-header]) {
+    padding-top: 3.5rem !important;
+  }
+
+  [data-admin-header] {
+    position: fixed !important;
+    top: 0 !important;
+  }
+
+  [data-admin-header] [data-slot="button"],
+  [data-admin-header] [data-slot="button"] svg {
+    flex-shrink: 0;
+  }
+
+  .admin-sidebar-desktop {
+    box-shadow: 4px 0 14px rgb(15 23 42 / 0.09);
+  }
+
+  /* Root zoom shortens 100dvh visually; continue the sidebar below that edge. */
+  .admin-sidebar-desktop::after {
+    position: absolute;
+    top: 100%;
+    left: -1px;
+    width: calc(100% + 1px);
+    height: 100dvh;
+    border-right: 1px solid var(--sidebar-border);
+    background: var(--sidebar);
+    content: "";
+  }
+}
+
+@media (min-width: 1024px) {
+  /*
+   * The dashboard was authored at an oversized density. Applying the scale at
+   * the root makes 100% browser zoom use the same compact layout density that
+   * previously only appeared when the browser itself was zoomed out.
+   */
+  html {
+    zoom: 0.85;
+  }
+
+  div:has(> [data-admin-header]) {
+    padding-top: 3.75rem !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  html {
+    zoom: 0.75;
+  }
+}
+
+@media (min-width: 1600px) {
+  html {
+    zoom: 0.7;
+  }
+}
+
+@media (max-width: 639px) {
+  [data-slot="card-header"], [data-slot="card-content"], [data-slot="card-footer"] {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  [data-slot="tabs-list"] {
+    display: flex !important;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  [data-slot="tabs-trigger"] {
+    flex: 0 0 auto;
   }
 }

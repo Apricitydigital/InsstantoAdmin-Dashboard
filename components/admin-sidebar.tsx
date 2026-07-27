@@ -78,10 +78,9 @@ export function AdminSidebar({ className }: SidebarProps) {
     } catch {}
   }
 
-  // Increase the sidebar width for expanded and collapsed states
   const getSidebarWidth = () => {
-    if (isCollapsed && !isHovered) return 100  // Increased collapsed width
-    return 320  // Increased expanded width
+    if (isCollapsed && !isHovered) return 72
+    return 256
   }
 
   const CollapsedSidebarContent = () => (
@@ -92,7 +91,7 @@ export function AdminSidebar({ className }: SidebarProps) {
         </Link>
       </div>
       <ScrollArea className="flex-1">
-        <nav className="grid items-start px-2 py-4 text-base font-medium">
+        <nav className="grid items-start gap-1 px-2 py-3 text-sm font-medium">
           {navigation.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -104,12 +103,12 @@ export function AdminSidebar({ className }: SidebarProps) {
                 key={item.name}
                 href={item.href}
                 className={cn(
-                  "flex items-center justify-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:bg-muted",
+                "flex min-h-10 items-center justify-center rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary",
                   isActive && "bg-gradient-to-r from-primary/10 to-secondary/10 text-primary border-r-2 border-primary"
                 )}
                 title={item.name}
               >
-                <item.icon className="h-6 w-6" />
+                <item.icon className="h-5 w-5" />
               </Link>
             )
           })}
@@ -129,7 +128,7 @@ export function AdminSidebar({ className }: SidebarProps) {
         </Link>
       </div>
       <ScrollArea className="flex-1">
-        <nav className="grid items-start px-2 py-4 text-lg font-medium lg:px-4">
+        <nav className="grid items-start gap-1 px-2 py-3 text-sm font-medium lg:px-3">
           {navigation.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -144,12 +143,12 @@ export function AdminSidebar({ className }: SidebarProps) {
                   <Link
                     href={item.href}
                     className={cn(
-                      "flex flex-1 items-center gap-4 rounded-lg px-4 py-3 text-muted-foreground transition-all hover:text-primary hover:bg-muted",
+                      "flex min-h-10 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:bg-muted hover:text-primary",
                       isActive &&
                         "bg-gradient-to-r from-primary/10 to-secondary/10 text-primary border-r-2 border-primary"
                     )}
                   >
-                    <item.icon className="h-6 w-6" />
+                    <item.icon className="h-5 w-5 shrink-0" />
                     {item.name}
                   </Link>
                   {hasChildren && (
@@ -170,7 +169,7 @@ export function AdminSidebar({ className }: SidebarProps) {
                         key={child.name}
                         href={child.href}
                         className={cn(
-                          "block rounded-lg px-4 py-3 text-lg text-muted-foreground transition-all hover:text-primary hover:bg-muted",
+                          "block rounded-lg px-3 py-2 text-sm text-muted-foreground transition-all hover:bg-muted hover:text-primary",
                           pathname === child.href &&
                             "bg-gradient-to-r from-primary/10 to-secondary/10 text-primary"
                         )}
@@ -196,7 +195,7 @@ export function AdminSidebar({ className }: SidebarProps) {
       {/* Desktop Sidebar */}
       <div
         className={cn(
-          "hidden border-r bg-sidebar lg:block fixed left-0 top-0 z-50 h-full transition-all duration-300 shadow-xl",
+          "admin-sidebar-desktop fixed left-0 top-0 z-50 hidden h-dvh border-r bg-sidebar transition-all duration-300 lg:block",
           className
         )}
         style={{ width: `${sidebarWidth}px` }}
@@ -209,12 +208,16 @@ export function AdminSidebar({ className }: SidebarProps) {
       {/* Mobile Sidebar */}
       <Sheet>
         <SheetTrigger asChild>
-          <Button variant="outline" size="icon" className="shrink-0 md:hidden bg-transparent">
+          <Button
+            variant="outline"
+            size="icon"
+            className="fixed left-3 top-2.5 z-50 size-9 shrink-0 bg-background/95 p-0 shadow-sm backdrop-blur lg:hidden"
+          >
             <Menu className="h-5 w-5" />
             <span className="sr-only">Toggle navigation menu</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="flex flex-col p-0 shadow-xl">
+        <SheetContent side="left" className="flex w-[min(20rem,88vw)] flex-col p-0 shadow-xl">
           <SidebarContent />
         </SheetContent>
       </Sheet>
@@ -222,12 +225,14 @@ export function AdminSidebar({ className }: SidebarProps) {
       <style jsx global>{`
         @media (min-width: 1024px) {
           body {
+            --admin-sidebar-width: ${sidebarWidth}px;
             margin-left: ${sidebarWidth}px;
             transition: margin-left 0.3s ease;
           }
         }
         @media (max-width: 1023.98px) {
           body {
+            --admin-sidebar-width: 0px;
             margin-left: 0px;
           }
         }

@@ -129,21 +129,21 @@ export default function DashboardPage() {
     <ProtectedRoute>
       <div className="flex min-h-screen w-full flex-col bg-muted/40">
         <AdminSidebar />
-        <div className="flex flex-col sm:gap-4 sm:py-4">
+        <div className="flex min-w-0 flex-1 flex-col sm:gap-4 sm:py-4">
           <AdminHeader title="Dashboard Overview" />
           <HomePageAlert />
           <main className="flex-1 space-y-6 p-4 md:p-6">
             {/* ---- Date Range Filter ---- */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-muted-foreground text-lg font-semibold"> Track key business metrics and performance here </p>
               </div>
-              <div className="flex gap-2 items-center">
+              <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:w-auto sm:flex-wrap">
                 <input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="border rounded px-2 py-1"
+                  className="min-w-0 rounded border bg-background px-2 py-2 text-sm sm:py-1"
                   max={formatDateInput(today)}  // Disable future dates
                 />
                 <span>to</span>
@@ -151,10 +151,10 @@ export default function DashboardPage() {
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="border rounded px-2 py-1"
+                  className="min-w-0 rounded border bg-background px-2 py-2 text-sm sm:py-1"
                   max={formatDateInput(today)}  // Disable future dates
                 />
-                <button onClick={clearFilter} className="bg-gray-200 hover:bg-gray-300 text-sm px-3 py-1 rounded">
+                <button onClick={clearFilter} className="col-span-3 rounded bg-gray-200 px-3 py-2 text-sm hover:bg-gray-300 sm:col-auto sm:py-1">
                   Show Overall Performance
                 </button>
               </div>
@@ -171,12 +171,12 @@ export default function DashboardPage() {
             </div>
             {/* ---- Charts ---- */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <ChartPlaceholder title="Monthly Bookings Trend" description="Booking volume over the selected range" icon={BarChart3} iconColor="text-primary" className="col-span-2" />
-              <GraphPlaceholder title="Monthly Revenue Trend" description="Revenue from real completed bookings" icon={Activity} iconColor="text-secondary" className="col-span-2" />
+              <ChartPlaceholder title="Monthly Bookings Trend" description="Booking volume over the selected range" icon={BarChart3} iconColor="text-primary" className="md:col-span-2" />
+              <GraphPlaceholder title="Monthly Revenue Trend" description="Revenue from real completed bookings" icon={Activity} iconColor="text-secondary" className="md:col-span-2" />
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <PnLGraph title="Net Profit & Loss Overview" description="Monthly earnings, expenses, and overall profit or loss trend" icon={BarChart3} className="col-span-2" />
-              <ExpensePieChart className="col-span-2" />
+              <PnLGraph title="Net Profit & Loss Overview" description="Monthly earnings, expenses, and overall profit or loss trend" icon={BarChart3} className="md:col-span-2" />
+              <ExpensePieChart className="md:col-span-2" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">

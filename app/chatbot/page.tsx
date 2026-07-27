@@ -169,7 +169,7 @@ export default function ChatBotPage() {
   return (
     <div className="flex h-screen bg-gray-50">
       <AdminSidebar />
-      <div className="flex-1 p-6 space-y-6 overflow-auto">
+      <div className="min-w-0 flex-1 space-y-6 overflow-auto p-4 sm:p-6">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
