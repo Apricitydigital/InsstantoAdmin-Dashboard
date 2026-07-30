@@ -43,11 +43,15 @@ export function ChartPlaceholder({
 
     const currentDate = new Date()
     // Generate 6 months starting from offset
-    const monthsAgo = Array.from({ length: 6 }, (_, i) => {
-      const date = new Date(currentDate)
-      date.setMonth(currentDate.getMonth() - i - offset)
-      return date
-    })
+    const monthsAgo = Array.from(
+      { length: 6 },
+      (_, i) =>
+        new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth() - i - offset,
+          1
+        )
+    )
 
     const visibleMonths = [...monthsAgo].reverse()
     const rangeStart = new Date(

@@ -387,7 +387,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
 
         {/* Table */}
         <div className="overflow-x-auto rounded-md border shadow-sm">
-          <Table className="min-w-[1100px] w-full text-sm">
+          <Table exportable={false} className="min-w-[1100px] w-full text-sm">
             <TableHeader>
               <TableRow>
                 <TableHead>Cart ID</TableHead>

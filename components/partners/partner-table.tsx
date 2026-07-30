@@ -367,7 +367,7 @@ export function PartnerTable({ fromDate, toDate }: PartnerTableProps) {
 
       <CardContent>
         <div className="rounded-md border">
-          <Table>
+          <Table exportable={false}>
             <TableHeader>
               <TableRow>
                 <TableHead>Partner</TableHead>

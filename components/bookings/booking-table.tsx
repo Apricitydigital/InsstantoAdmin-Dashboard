@@ -25,13 +25,6 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -39,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, Phone, Calendar, Search, Filter } from "lucide-react"
+import { Loader2, Phone, Calendar, Search, Filter, ChevronDown } from "lucide-react"
 import { DetailsSheet } from "@/components/bookings/booking-component"
 
 // ✅ import from partner.ts
@@ -334,29 +327,35 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Filter className="h-4 w-4 text-muted-foreground" />
 
-            <Select value={bookingTypeFilter} onValueChange={setBookingTypeFilter}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Booking Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="real">Real Booking</SelectItem>
-                <SelectItem value="all">All Bookings</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative shrink-0">
+              <select
+                aria-label="Booking type"
+                value={bookingTypeFilter}
+                onChange={(event) => setBookingTypeFilter(event.target.value)}
+                className="border-input bg-background h-9 w-[160px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <option value="real">Real Booking</option>
+                <option value="all">All Bookings</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+            </div>
 
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="accepted">Accepted</SelectItem>
-                <SelectItem value="in progress">In Progress</SelectItem>
-                <SelectItem value="service_completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative shrink-0">
+              <select
+                aria-label="Booking status"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="border-input bg-background h-9 w-[150px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="accepted">Accepted</option>
+                <option value="in progress">In Progress</option>
+                <option value="service_completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+            </div>
           </div>
         </div>
 

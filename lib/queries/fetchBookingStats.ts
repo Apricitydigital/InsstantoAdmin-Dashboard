@@ -72,14 +72,45 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
         0
     )
 
-    // Ratings remain all-time because the booking table has no review-date filter.
+    // Apply the selected range to ratings as well. Older review records may use
+    // `timestamp` or `date` instead of `createdAt`, so filter them client-side.
     const reviewsQuery = query(reviewsCol, where("partnerId", "in", customerRefs))
     const reviewSnap = await getDocs(reviewsQuery)
+
+    const ratingStart = fromDate ? new Date(`${fromDate}T00:00:00`) : null
+    const ratingEnd = toDate ? new Date(`${toDate}T23:59:59.999`) : null
+
+    const toReviewDate = (value: unknown): Date | null => {
+        if (value instanceof Date) return value
+        if (value instanceof Timestamp) return value.toDate()
+        if (value && typeof value === "object" && "toDate" in value) {
+            const toDate = (value as { toDate?: unknown }).toDate
+            if (typeof toDate === "function") {
+                const converted = toDate.call(value)
+                return converted instanceof Date ? converted : null
+            }
+        }
+        if (typeof value === "string" || typeof value === "number") {
+            const converted = new Date(value)
+            return Number.isNaN(converted.getTime()) ? null : converted
+        }
+        return null
+    }
 
     let totalRating = 0
     let ratingCount = 0
     reviewSnap.forEach(review => {
-        const data = review.data() as { partnerRating?: number }
+        const data = review.data() as {
+            partnerRating?: number
+            createdAt?: unknown
+            timestamp?: unknown
+            date?: unknown
+        }
+        const reviewDate = toReviewDate(data.createdAt ?? data.timestamp ?? data.date)
+        if ((ratingStart || ratingEnd) && !reviewDate) return
+        if (ratingStart && reviewDate && reviewDate < ratingStart) return
+        if (ratingEnd && reviewDate && reviewDate > ratingEnd) return
+
         if (data.partnerRating && data.partnerRating > 0) {
             totalRating += data.partnerRating
             ratingCount++

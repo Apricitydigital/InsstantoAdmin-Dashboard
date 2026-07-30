@@ -21,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Table } from "@/components/ui/table"
 import { Package, ShoppingCart, Users, Plus, TrendingUp, ArrowLeft, ArrowRight } from "lucide-react"
 
 /* ---------- TYPES ---------- */
@@ -374,7 +375,7 @@ function DataCard({ title, description, data, columns, loading, onNext, page }: 
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="min-w-full border border-gray-200 text-sm">
+              <Table className="min-w-full border border-gray-200 text-sm">
                 <thead className="bg-gray-100 text-gray-700">
                   <tr>
                     {columns.map((col: any) => (
@@ -395,7 +396,7 @@ function DataCard({ title, description, data, columns, loading, onNext, page }: 
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </div>
 
             {/* Pagination */}

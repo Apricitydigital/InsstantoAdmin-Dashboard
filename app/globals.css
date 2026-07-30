@@ -136,6 +136,30 @@
 }
 
 @layer utilities {
+  /* Keep filter controls aligned and allow them to wrap on narrow screens. */
+  main :is(div, form):has(> input[type="date"]),
+  main :is(div, form):has(> input):has(> select),
+  main :is(div, form):has(> input):has(> [data-slot="select-trigger"]) {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  main input[type="date"],
+  main input[type="search"],
+  main select,
+  main [data-slot="select-trigger"] {
+    min-height: 2.5rem;
+  }
+
+  main :is(div, form):has(> input[type="date"]) > :is(input, button, [data-slot="button"], [data-slot="select-trigger"]) {
+    height: 2.5rem;
+  }
+
+  main :is(div, form):has(> input):has(> select) > :is(input, select, button, [data-slot="button"]),
+  main :is(div, form):has(> input):has(> [data-slot="select-trigger"]) > :is(input, button, [data-slot="button"], [data-slot="select-trigger"]) {
+    height: 2.5rem;
+  }
+
   /* Prevent flex/grid children and dashboard cards from widening the viewport. */
   main, main > *, [data-slot="tabs"], [data-slot="tabs-content"], [data-slot="card"] {
     min-width: 0;

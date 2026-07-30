@@ -2,15 +2,8 @@ import type React from "react"
 import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
-import { Manrope } from "next/font/google"
 import { AuthProvider } from "@/lib/auth"
 import "./globals.css"
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-manrope",
-})
 
 export const metadata: Metadata = {
   title: "Insstanto Admin Dashboard",
@@ -25,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} ${manrope.variable}`}>
+      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

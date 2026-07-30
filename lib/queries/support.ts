@@ -69,6 +69,11 @@ const userNamePromiseCache = new Map<
   Promise<string | null>
 >()
 
+const userDataPromiseCache = new Map<
+  string,
+  Promise<UserData | null>
+>()
+
 // ============================================================
 // COMMON HELPERS
 // ============================================================
@@ -185,24 +190,9 @@ function resolveUserName(
     userNamePromiseCache.get(cacheKey)
 
   if (!cachedPromise) {
-    cachedPromise = getDoc(reference)
-      .then((snapshot) => {
-        if (!snapshot.exists()) {
-          return null
-        }
-
-        return getUserDisplayName(
-          snapshot.data() as UserData
-        )
-      })
-      .catch((error) => {
-        console.error(
-          `Error fetching user ${cacheKey}:`,
-          error
-        )
-
-        return null
-      })
+    cachedPromise = resolveUserData(reference).then(
+      (data) => getUserDisplayName(data || undefined)
+    )
 
     userNamePromiseCache.set(
       cacheKey,
@@ -213,6 +203,43 @@ function resolveUserName(
   return cachedPromise.then(
     (name) => name || fallback
   )
+}
+
+function resolveUserData(
+  reference: DocumentReference
+): Promise<UserData | null> {
+  const cacheKey = reference.path
+  let cachedPromise = userDataPromiseCache.get(cacheKey)
+
+  if (!cachedPromise) {
+    cachedPromise = getDoc(reference)
+      .then((snapshot) =>
+        snapshot.exists()
+          ? (snapshot.data() as UserData)
+          : null
+      )
+      .catch((error) => {
+        console.error(`Error fetching user ${cacheKey}:`, error)
+        return null
+      })
+
+    userDataPromiseCache.set(cacheKey, cachedPromise)
+  }
+
+  return cachedPromise
+}
+
+function getUserContact(data: UserData | null): string {
+  if (!data) return ""
+
+  const contact =
+    data.phone_number ||
+    data.contact_no ||
+    data.customer_phone ||
+    data.customer_mobile ||
+    data.mobile_number
+
+  return contact == null ? "" : String(contact)
 }
 
 function createChunks<T>(
@@ -399,8 +426,10 @@ export async function hydrateSupportTicketCustomerNames(
     ),
   ]
 
-  const customerNames =
-    new Map<string, string>()
+  const customerDetails = new Map<
+    string,
+    { name: string; contact: string }
+  >()
 
   await Promise.all(
     uniqueCustomerIds.map(
@@ -416,32 +445,26 @@ export async function hydrateSupportTicketCustomerNames(
           relatedTicket?.customerName ||
           "Unknown Customer"
 
-        const customerName =
-          await resolveUserName(
-            doc(
-              db,
-              "customer",
-              customerId
-            ),
-            fallbackName
-          )
+        const customerReference = doc(db, "customer", customerId)
+        const customerData = await resolveUserData(customerReference)
 
-        customerNames.set(
-          customerId,
-          customerName
-        )
+        customerDetails.set(customerId, {
+          name: getUserDisplayName(customerData || undefined) || fallbackName,
+          contact: getUserContact(customerData),
+        })
       }
     )
   )
 
-  return tickets.map((ticket) => ({
-    ...ticket,
+  return tickets.map((ticket) => {
+    const customer = customerDetails.get(ticket.customerId)
 
-    customerName:
-      customerNames.get(
-        ticket.customerId
-      ) || ticket.customerName,
-  }))
+    return {
+      ...ticket,
+      customerName: customer?.name || ticket.customerName,
+      contact_no: ticket.contact_no || customer?.contact || "",
+    }
+  })
 }
 
 export async function getTicketById(

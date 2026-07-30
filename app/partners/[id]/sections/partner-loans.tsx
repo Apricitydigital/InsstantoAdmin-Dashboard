@@ -28,7 +28,7 @@ import {
 type LoanBooking = {
   bookingName: string
   partnerfare: number
-  bookingDate: Timestamp
+  bookingDate: Timestamp | Date
   loanAmount: number
   loanPercentage: number
   bookingid: string
@@ -111,14 +111,22 @@ export function PartnerLoansSection({ partnerId, fromDate, toDate }: PartnerLoan
       maximumFractionDigits: 0,
     }).format(amount)
 
-  const formatDate = (timestamp?: Timestamp) =>
-    timestamp?.toDate
-      ? timestamp.toDate().toLocaleDateString("en-IN", {
+  const toDateValue = (value?: Timestamp | Date) => {
+    if (!value) return null
+    if (value instanceof Date) return value
+    return value.toDate?.() || null
+  }
+
+  const formatDate = (timestamp?: Timestamp | Date) => {
+    const date = toDateValue(timestamp)
+    return date
+      ? date.toLocaleDateString("en-IN", {
           day: "2-digit",
           month: "short",
           year: "numeric",
         })
       : "—"
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
@@ -149,20 +157,27 @@ export function PartnerLoansSection({ partnerId, fromDate, toDate }: PartnerLoan
   const filteredAndSortedBookings = useMemo(() => {
     if (!loan?.bookingDetails) return []
     
-    const startDate = new Date(`${fromDate}T00:00:00`)
-    const endDate = new Date(`${toDate}T23:59:59`)
+    const startDate = fromDate ? new Date(`${fromDate}T00:00:00`) : null
+    const endDate = toDate ? new Date(`${toDate}T23:59:59.999`) : null
 
     return [...loan.bookingDetails]
       .filter((booking) => {
-        const bookingDate = booking.bookingDate?.toDate()
-        return bookingDate && bookingDate >= startDate && bookingDate <= endDate
+        const bookingDate = toDateValue(booking.bookingDate)
+        if (!bookingDate) return false
+        if (startDate && bookingDate < startDate) return false
+        if (endDate && bookingDate > endDate) return false
+        return true
       })
       .sort((a, b) => {
-        const dateA = a.bookingDate?.toDate?.() || new Date(0)
-        const dateB = b.bookingDate?.toDate?.() || new Date(0)
+        const dateA = toDateValue(a.bookingDate) || new Date(0)
+        const dateB = toDateValue(b.bookingDate) || new Date(0)
         return dateB.getTime() - dateA.getTime()
       })
   }, [loan?.bookingDetails, fromDate, toDate])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [fromDate, toDate, loan?.bookingDetails])
 
   const totalPages = Math.ceil(filteredAndSortedBookings.length / rowsPerPage)
   const paginatedBookings = filteredAndSortedBookings.slice(
@@ -271,6 +286,7 @@ export function PartnerLoansSection({ partnerId, fromDate, toDate }: PartnerLoan
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
+                      <TableHead>Booking Name</TableHead>
                       <TableHead>Partner Fare</TableHead>
                       <TableHead>Loan Deducted</TableHead>
                       <TableHead>Percentage</TableHead>
@@ -279,8 +295,9 @@ export function PartnerLoansSection({ partnerId, fromDate, toDate }: PartnerLoan
                   </TableHeader>
                   <TableBody>
                     {paginatedBookings.map((b, i) => (
-                      <TableRow key={i}>
+                      <TableRow key={b.bookingid || i}>
                         <TableCell>{formatDate(b.bookingDate)}</TableCell>
+                        <TableCell>{b.bookingName || "—"}</TableCell>
                         <TableCell>{formatCurrency(b.partnerfare)}</TableCell>
                         <TableCell>{formatCurrency(b.loanAmount)}</TableCell>
                         <TableCell>{b.loanPercentage}%</TableCell>

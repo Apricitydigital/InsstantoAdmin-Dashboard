@@ -3,18 +3,30 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { TableExportButton } from "@/components/ui/table-export-button"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+type TableProps = React.ComponentProps<"table"> & {
+  exportable?: boolean
+}
+
+function Table({ className, exportable = true, ...props }: TableProps) {
   return (
-    <div
-      data-slot="table-container"
-      className="relative w-full max-w-full overflow-x-auto overscroll-x-contain"
-    >
-      <table
-        data-slot="table"
-        className={cn("w-full min-w-max caption-bottom text-xs sm:text-sm", className)}
-        {...props}
-      />
+    <div data-export-scope className="relative w-full max-w-full">
+      {exportable && (
+        <div className="flex justify-end p-2">
+          <TableExportButton />
+        </div>
+      )}
+      <div
+        data-slot="table-container"
+        className="w-full max-w-full overflow-x-auto overscroll-x-contain"
+      >
+        <table
+          data-slot="table"
+          className={cn("w-full min-w-max caption-bottom text-xs sm:text-sm", className)}
+          {...props}
+        />
+      </div>
     </div>
   )
 }

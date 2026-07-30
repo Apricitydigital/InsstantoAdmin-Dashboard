@@ -31,7 +31,7 @@ const navigation = [
   { name: "Payment Management", href: "/payments", icon: CreditCard },
   { name: "Coupons & Offers", href: "/coupons", icon: Ticket },
   { name: "Complaints & Support", href: "/support", icon: MessageSquare },
-  { name: "Partner Chat Bot", href: "/chatbot", icon: MessageSquare },
+  { name: "AI Data Assistant", href: "/chatbot", icon: MessageSquare },
   { name: "Store", href: "/store", icon: Store },
   {
     name: "Analytics",

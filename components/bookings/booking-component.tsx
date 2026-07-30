@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore"
 
 import { getFirestoreDb } from "@/lib/firebase"
+import { Star } from "lucide-react"
 
 // ----------------------------------------------------
 // TYPES
@@ -31,6 +32,14 @@ interface DetailsSheetProps {
   customer: any;
   provider: any;
   services: string[];
+}
+
+type BookingReview = {
+  id: string
+  rating: number
+  feedback: string
+  reasons: string[]
+  createdAt: Date | null
 }
 
 // ----------------------------------------------------
@@ -48,6 +57,9 @@ export function DetailsSheet({
   const db = getFirestoreDb()
 
   const [detailData, setDetailData] = useState<any>(null)
+  const [bookingDocument, setBookingDocument] = useState<any>(null)
+  const [review, setReview] = useState<BookingReview | null>(null)
+  const [reviewLoading, setReviewLoading] = useState(false)
 
   const [loading, setLoading] = useState(false)
 
@@ -57,6 +69,24 @@ export function DetailsSheet({
   // ----------------------------------------------------
   // FETCH START-TO-END DATA
   // ----------------------------------------------------
+  useEffect(() => {
+    if (!booking?.id || !open) return
+
+    const bookingRef = doc(db, "bookings", booking.id)
+    const unsub = onSnapshot(
+      bookingRef,
+      (snapshot) => {
+        setBookingDocument(snapshot.exists() ? snapshot.data() : null)
+      },
+      (error) => {
+        console.error("Realtime booking document error:", error)
+        setBookingDocument(null)
+      }
+    )
+
+    return () => unsub()
+  }, [booking?.id, db, open])
+
   useEffect(() => {
     if (!booking?.id || !open) return
 
@@ -87,6 +117,64 @@ export function DetailsSheet({
     )
 
     return () => unsub()
+  }, [booking?.id, db, open])
+
+  useEffect(() => {
+    if (!booking?.id || !open) return
+
+    let active = true
+    setReviewLoading(true)
+    setReview(null)
+
+    const bookingRef = doc(db, "bookings", booking.id)
+    const reviews = collection(db, "reviews")
+
+    Promise.all([
+      getDocs(query(reviews, where("bookingId", "==", bookingRef))),
+      getDocs(query(reviews, where("bookingId", "==", booking.id))),
+    ])
+      .then((snapshots) => {
+        if (!active) return
+
+        const reviewDocs = new Map(
+          snapshots.flatMap((snapshot) => snapshot.docs).map((reviewDoc) => [reviewDoc.id, reviewDoc])
+        )
+
+        const linkedReviews = Array.from(reviewDocs.values())
+          .map((reviewDoc): BookingReview => {
+            const data = reviewDoc.data()
+            const rawDate = data.createdAt ?? data.timestamp ?? data.date
+            const createdAt = rawDate?.toDate?.() ??
+              (rawDate ? new Date(rawDate) : null)
+
+            return {
+              id: reviewDoc.id,
+              rating: Number(data.partnerRating ?? data.rating ?? 0),
+              feedback: String(data.feedback ?? data.comment ?? ""),
+              reasons: Array.isArray(data.partner_reasonOptions)
+                ? data.partner_reasonOptions.map(String)
+                : [],
+              createdAt: createdAt instanceof Date && !Number.isNaN(createdAt.getTime())
+                ? createdAt
+                : null,
+            }
+          })
+          .filter((item) => item.rating > 0 || item.feedback || item.reasons.length > 0)
+          .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+
+        setReview(linkedReviews[0] ?? null)
+      })
+      .catch((error) => {
+        console.error("Booking review error:", error)
+        if (active) setReview(null)
+      })
+      .finally(() => {
+        if (active) setReviewLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
   }, [booking?.id, db, open])
 
 
@@ -161,6 +249,54 @@ export function DetailsSheet({
             />
             <DetailBlock label="Partner Fare" value={`₹${booking.partner_fare?.toLocaleString() || 0}`} />
             <DetailBlock label="Status" value={booking.status?.replace("_", " ")} />
+            <DetailBlock
+              label="Cancellation Reason"
+              value={bookingDocument?.cancelReason ?? booking.cancelReason}
+            />
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+                Rating &amp; Review
+              </div>
+              {reviewLoading ? (
+                <p className="mt-2 text-muted-foreground">Loading review...</p>
+              ) : review ? (
+                <div className="mt-2 rounded-lg border bg-amber-50/60 p-4">
+                  <div className="flex items-center gap-1" aria-label={`${review.rating} out of 5 stars`}>
+                    {Array.from({ length: 5 }, (_, index) => (
+                      <Star
+                        key={index}
+                        className={`size-5 ${
+                          index < Math.round(review.rating)
+                            ? "fill-amber-400 text-amber-400"
+                            : "text-gray-300"
+                        }`}
+                      />
+                    ))}
+                    <span className="ml-2 font-semibold text-gray-800">{review.rating.toFixed(1)}/5</span>
+                  </div>
+                  {review.feedback && (
+                    <p className="mt-3 whitespace-pre-line text-gray-800">{review.feedback}</p>
+                  )}
+                  {review.reasons.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {review.reasons.map((reason) => (
+                        <span key={reason} className="rounded-full bg-white px-2.5 py-1 text-xs text-gray-700 shadow-sm">
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {review.createdAt && (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Reviewed {review.createdAt.toLocaleString("en-IN")}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-2 text-muted-foreground">No rating or review for this booking.</p>
+              )}
+            </div>
 
 
 

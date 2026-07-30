@@ -339,7 +339,7 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
         ) : (
           <>
             <div className="rounded-md border">
-              <Table>
+              <Table exportable={false}>
                 <TableCaption>Customer records</TableCaption>
                 <TableHeader>
                   <TableRow>

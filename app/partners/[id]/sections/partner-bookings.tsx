@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 import {
     collection,
@@ -32,6 +31,8 @@ import {
     Loader2,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
+    Download,
     BarChart3,
 } from "lucide-react"
 import { DetailsSheet } from "@/components/bookings/booking-component"
@@ -381,6 +382,58 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
     const goNext = () => { if (hasNextPage) setCurrentPage(prev => prev + 1) }
     const goPrev = () => { if (hasPrevPage) setCurrentPage(prev => prev - 1) }
 
+    const handleExport = () => {
+        const escapeCsvValue = (value: unknown) => {
+            const text = value == null ? "" : String(value)
+            return `"${text.replace(/"/g, '""')}"`
+        }
+
+        const headers = [
+            "Booking ID",
+            "Customer",
+            "Phone",
+            "Services",
+            "Booking Date",
+            "Time Slot",
+            "Status",
+            "Amount",
+            "Partner Fare",
+            "Address",
+        ]
+
+        const rows = filteredBookings.map((booking) => {
+            const customer = customerMap[booking.customer_id?.path] || { name: "Unknown", phone: "N/A" }
+
+            return [
+                booking.id,
+                customer.name,
+                customer.phone,
+                getServicesForBooking(booking).join("; "),
+                formatDate(booking.date),
+                formatDate(booking.timeSlot),
+                booking.status || "Unknown",
+                booking.amount_paid ?? 0,
+                booking.partner_fare ?? "",
+                booking.bookingAddress ?? "",
+            ]
+        })
+
+        const csv = [headers, ...rows]
+            .map(row => row.map(escapeCsvValue).join(","))
+            .join("\r\n")
+        const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        const range = fromDate || toDate ? `_${fromDate || "start"}_to_${toDate || "end"}` : ""
+
+        link.href = url
+        link.download = `partner_bookings_${partnerId}${range}.csv`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        URL.revokeObjectURL(url)
+    }
+
     // ==========================================================
     // STATS (Use date-filtered bookings)
     // ==========================================================
@@ -465,22 +518,35 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
                             </div>
                         </div>
 
-                        <div className="flex items-center space-x-2">
+                        <div className="flex w-full items-center gap-2 md:w-auto">
                             <Filter className="h-4 w-4 text-muted-foreground" />
-                            <Select value={statusFilter} onValueChange={setStatusFilter}>
-                                <SelectTrigger className="w-[140px]">
-                                    <SelectValue placeholder="Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Status</SelectItem>
-                                    <SelectItem value="pending">Pending</SelectItem>
-                                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                                    <SelectItem value="accepted">Accepted</SelectItem>
-                                    <SelectItem value="in-progress">In Progress</SelectItem>
-                                    <SelectItem value="service_completed">Completed</SelectItem>
-                                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <div className="relative shrink-0">
+                                <select
+                                    aria-label="Booking status"
+                                    value={statusFilter}
+                                    onChange={(event) => setStatusFilter(event.target.value)}
+                                    className="border-input bg-background h-9 w-[150px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                >
+                                    <option value="all">All Status</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="confirmed">Confirmed</option>
+                                    <option value="accepted">Accepted</option>
+                                    <option value="in-progress">In Progress</option>
+                                    <option value="service_completed">Completed</option>
+                                    <option value="cancelled">Cancelled</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleExport}
+                                disabled={filteredBookings.length === 0}
+                                className="shrink-0"
+                            >
+                                <Download className="mr-2 h-4 w-4" />
+                                Export CSV
+                            </Button>
                         </div>
                     </div>
 
@@ -494,7 +560,7 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
 
                         <>
                             <div className="rounded-md border overflow-x-auto">
-                                <Table className="min-w-[1200px]">
+                                <Table exportable={false} className="min-w-[1200px]">
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Booking ID</TableHead>

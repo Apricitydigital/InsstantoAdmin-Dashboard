@@ -862,10 +862,10 @@ export default function SupportPage() {
   // ==========================================================
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar />
 
-      <main className="min-w-0 flex-1 overflow-auto">
+      <main className="min-w-0 flex-1 overflow-x-hidden">
         <div className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6">
           {/* ==================================================
               PAGE HEADER
@@ -1263,9 +1263,9 @@ export default function SupportPage() {
                                 </div>
                               </TableCell>
 
-                              <TableCell className="min-w-[220px]">
+                              <TableCell className="min-w-[320px] max-w-lg align-top">
                                 <div
-                                  className="max-w-xs truncate"
+                                  className="whitespace-normal break-words leading-relaxed"
                                   title={
                                     ticket.subject
                                   }

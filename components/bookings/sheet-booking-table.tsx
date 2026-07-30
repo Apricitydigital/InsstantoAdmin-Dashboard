@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Table } from "@/components/ui/table";
 
 type SheetBooking = {
   id: string;
@@ -121,7 +122,7 @@ export function SheetBookingTable({ fromDate, toDate }: Props) {
 
       {/* TABLE */}
       <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
+        <Table className="min-w-full text-sm">
           <thead className="bg-muted/50">
             <tr className="text-left">
               <th className="px-4 py-3">Date</th>
@@ -184,7 +185,7 @@ export function SheetBookingTable({ fromDate, toDate }: Props) {
               </tr>
             )}
           </tbody>
-        </table>
+        </Table>
       </div>
 
       {/* PAGINATION */}

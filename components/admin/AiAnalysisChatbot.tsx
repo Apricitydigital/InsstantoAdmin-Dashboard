@@ -8,6 +8,7 @@ import {
   fetchBookingStats,
   fetchCategoryWiseBookings,
 } from "@/lib/queries/dashboard";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -338,10 +339,12 @@ export default function AiAnalysisChatbot({
         toDate: parsedRange.toDate,
       });
 
+      const token = await getFirebaseAuth().currentUser?.getIdToken();
       const res = await fetch("/api/admin/ai-chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token || ""}`,
         },
         body: JSON.stringify({
           message: finalMessage,
