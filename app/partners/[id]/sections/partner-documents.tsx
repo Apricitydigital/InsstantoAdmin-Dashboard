@@ -54,8 +54,10 @@ export function PartnerDocumentsSection({ partnerId }: PartnerDocumentsSectionPr
           const data = snapshot.docs[0].data()
           setDocs({
             photo: data.photo || null,
-            adhaarFront: data.adhaarFront || null,
-            adhaarBack: data.adhaarBack || null,
+            adhaarFront:
+              data.adhaarFront ?? data.aadharFront ?? data.aadhaarFront ?? null,
+            adhaarBack:
+              data.adhaarBack ?? data.aadharBack ?? data.aadhaarBack ?? null,
             panCard: data.panCard || null,
             bankPassbook: data.bankPassbook || null,
             policeVerification: data.policeVerification || null,

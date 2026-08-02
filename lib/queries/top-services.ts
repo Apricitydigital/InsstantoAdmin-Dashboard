@@ -30,6 +30,9 @@ export type TopCategory = {
   }[];
 };
 
+// Keep category statistics consistent with the booking and revenue charts.
+const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2";
+
 
 // Firestore document types
 type SubCategoryDoc = {
@@ -151,8 +154,8 @@ export async function fetchTopCategories(
     const filters: any[] = [where("status", "==", "Service_Completed")];
 
     if (fromDate && toDate) {
-      const start = Timestamp.fromDate(new Date(fromDate + "T00:00:00Z"));
-      const end = Timestamp.fromDate(new Date(toDate + "T23:59:59Z"));
+      const start = Timestamp.fromDate(new Date(fromDate + "T00:00:00"));
+      const end = Timestamp.fromDate(new Date(toDate + "T23:59:59.999"));
       filters.push(where("date", ">=", start));
       filters.push(where("date", "<=", end));
     }
@@ -166,7 +169,12 @@ export async function fetchTopCategories(
       .map((d) => d.data())
       .filter((b) => {
         const providerId = b.provider_id?.id || b.provider_id;
-        return allowedProviders.includes(providerId);
+        const customerId = b.customer_id?.id || b.customer_id;
+
+        return (
+          allowedProviders.includes(providerId) &&
+          customerId !== INTERNAL_CUSTOMER_ID
+        );
       });
 
     if (bookings.length === 0) return [];

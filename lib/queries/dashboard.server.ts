@@ -478,12 +478,12 @@ export async function fetchCategoryWiseBookings(
 
     const bookingsCol = collection(db, "bookings");
 
-    // Get all completed bookings in the date range
+    // Get all completed bookings in the date range, excluding the internal test/customer account
     const completedSnap = await getDocs(
         query(
             bookingsCol,
             where("provider_id", "in", providerRefs),
-            // where("status", "==", "Service_Completed"),
+            where("status", "==", "Service_Completed"),
             where("date", ">=", fromTS),
             where("date", "<=", toTS)
         )
@@ -499,6 +499,12 @@ export async function fetchCategoryWiseBookings(
     // Count bookings by category
     for (const docSnap of completedSnap.docs) {
         const booking = docSnap.data() as any;
+        const customerId = booking.customer_id?.id || booking.customer_id;
+
+        if (customerId === "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2") {
+            continue;
+        }
+
         const subCatRef = booking.subCategoryCart_id;
 
         if (subCatRef) {

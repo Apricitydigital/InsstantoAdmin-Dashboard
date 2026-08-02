@@ -1618,10 +1618,31 @@ export async function fetchCategoryWiseBookings(
   }
 
   const bookings =
-    bookingDocuments.map(
-      (bookingDocument) =>
-        bookingDocument.data() as BookingData
-    )
+    bookingDocuments
+      .map(
+        (bookingDocument) =>
+          bookingDocument.data() as BookingData
+      )
+      .filter((booking) => {
+        const status =
+          booking.status?.toString().trim()
+        const customerId =
+          booking.customer_id?.id ??
+          booking.customer_id
+
+        return (
+          status?.toLowerCase() ===
+            "service_completed" &&
+          customerId !==
+            INTERNAL_CUSTOMER_ID
+        )
+      })
+
+  if (bookings.length === 0) {
+    return {
+      ...EMPTY_CATEGORY_COUNTS,
+    }
+  }
 
   /*
     Category lookups run in parallel.
