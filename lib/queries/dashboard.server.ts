@@ -277,13 +277,20 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
             customer_id: d.customer_id ?? null,
         });
 
-        totalRevenue += d.amount_paid || 0;
-        walletUsed += d.walletAmountUsed || 0;
-        discounts += d.discount_amount || 0;
-        totalOfferAmount += (d.walletAmountUsed || 0) + (d.discount_amount || 0);
+        const amountPaid = Number(d.amount_paid) || 0;
+        const walletAmount = Number(d.walletAmountUsed) || 0;
+        const discountAmount = Number(d.discount_amount) || 0;
+
+        totalRevenue += amountPaid + walletAmount + discountAmount;
+        walletUsed += walletAmount;
+        discounts += discountAmount;
+        totalOfferAmount += walletAmount + discountAmount;
     });
 
-    const netRevenue = totalRevenue - walletUsed - discounts;
+    const netRevenue = completedDocsData.reduce(
+        (sum, booking) => sum + (Number(booking.amount_paid) || 0),
+        0
+    );
 
     const perOrderValue = completedBookings > 0 ? totalRevenue / completedBookings : 0;
 

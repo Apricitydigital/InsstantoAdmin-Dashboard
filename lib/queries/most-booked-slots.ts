@@ -39,7 +39,10 @@ export async function fetchMostBookedSlots(fromDate: string, toDate: string): Pr
       const amPm = slotDate.getHours() >= 12 ? "PM" : "AM";
       const timeKey = `${hour.toString().padStart(2, "0")}:00 ${amPm}`;
 
-      const amount = Number(data.amount_paid || 0); // ✅ use amount_paid for revenue
+      const amount =
+        Number(data.amount_paid || 0) +
+        Number(data.walletAmountUsed || 0) +
+        Number(data.discount_amount || 0);
 
       if (!slotData[timeKey]) {
         slotData[timeKey] = { bookings: 0, revenue: 0 };

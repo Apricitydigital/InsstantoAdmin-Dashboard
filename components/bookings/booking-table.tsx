@@ -45,7 +45,9 @@ type BookingDoc = {
   provider_id?: DocumentReference<DocumentData> | null
   status?: string
   subCategoryCart_id?: any
-  amount_paid?: number
+  amount_paid?: number | string
+  walletAmountUsed?: number | string
+  discount_amount?: number | string
   date?: Timestamp
   timeSlot?: Timestamp
   bookingAddress?: string
@@ -58,6 +60,11 @@ type ServiceMap = Record<string, string[]>
 const PAGE_SIZE = 20
 
 const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
+
+const toAmount = (value: unknown) => {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount : 0
+}
 
 interface BookingTableProps {
   fromDate: string
@@ -76,6 +83,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [bookingTypeFilter, setBookingTypeFilter] = useState("real")
+  const [revenueFilter, setRevenueFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedBooking, setSelectedBooking] = useState<BookingDoc | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -227,8 +235,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       timeStyle: "short",
     }) || "—"
 
-  const amountPaid = (b: BookingDoc) =>
-    typeof b.amount_paid === "number" ? b.amount_paid : 0
+  const amountPaid = (b: BookingDoc) => toAmount(b.amount_paid)
 
   const filteredBookings = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
@@ -266,14 +273,24 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       const matchesSearch = !term || text.includes(term)
       const matchesStatus =
         statusFilter === "all" || normalize(b.status) === statusFilter
+      const paidAmount = toAmount(b.amount_paid)
+      const walletAmount = toAmount(b.walletAmountUsed)
+      const netRevenue = paidAmount
+      const hasNegativeRevenue = netRevenue < 0
+      const isFullyWalletPaid = walletAmount > 0 && Math.abs(paidAmount - walletAmount) < 0.01
+      const matchesRevenue = revenueFilter === "all"
+        || (revenueFilter === "issues" && (hasNegativeRevenue || isFullyWalletPaid))
+        || (revenueFilter === "negative" && hasNegativeRevenue)
+        || (revenueFilter === "wallet_equal" && isFullyWalletPaid)
 
-      return matchesBookingType && matchesSearch && matchesStatus
+      return matchesBookingType && matchesSearch && matchesStatus && matchesRevenue
     })
   }, [
     allBookings,
     searchTerm,
     statusFilter,
     bookingTypeFilter,
+    revenueFilter,
     customerMap,
     providerMap,
     servicesMap,
@@ -290,7 +307,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, bookingTypeFilter])
+  }, [searchTerm, statusFilter, bookingTypeFilter, revenueFilter])
 
   const statusColors: Record<string, string> = {
     Pending: "bg-orange-100 text-orange-800",
@@ -324,7 +341,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <Filter className="h-4 w-4 text-muted-foreground" />
 
             <div className="relative shrink-0">
@@ -353,6 +370,21 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
                 <option value="in progress">In Progress</option>
                 <option value="service_completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+            </div>
+
+            <div className="relative shrink-0">
+              <select
+                aria-label="Booking revenue"
+                value={revenueFilter}
+                onChange={(event) => setRevenueFilter(event.target.value)}
+                className="border-input bg-background h-9 w-[170px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <option value="all">All Revenue</option>
+                <option value="issues">Revenue Issues</option>
+                <option value="negative">Negative Revenue</option>
+                <option value="wallet_equal">Amount = Wallet</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
             </div>

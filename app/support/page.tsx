@@ -221,6 +221,12 @@ export default function SupportPage() {
     setStatusFilter,
   ] = useState("all")
 
+  const [fromDate, setFromDate] =
+    useState("")
+
+  const [toDate, setToDate] =
+    useState("")
+
   const [activeTab, setActiveTab] =
     useState("tickets")
 
@@ -269,6 +275,13 @@ export default function SupportPage() {
     useState<SupportTicket | null>(
       null
     )
+
+  const [
+    resolutionTicket,
+    setResolutionTicket,
+  ] = useState<SupportTicket | null>(
+    null
+  )
 
   const [
     completionNote,
@@ -594,7 +607,9 @@ export default function SupportPage() {
 
       if (
         !normalizedTerm &&
-        statusFilter === "all"
+        statusFilter === "all" &&
+        !fromDate &&
+        !toDate
       ) {
         return ticketsWithSearchText
       }
@@ -612,9 +627,29 @@ export default function SupportPage() {
             ticket.status ===
               statusFilter
 
+          const createdAt =
+            getDateValue(ticket.createdAt)
+
+          const fromTime = fromDate
+            ? new Date(
+                `${fromDate}T00:00:00`
+              ).getTime()
+            : 0
+
+          const toTime = toDate
+            ? new Date(
+                `${toDate}T23:59:59.999`
+              ).getTime()
+            : Number.POSITIVE_INFINITY
+
+          const matchesDateRange =
+            createdAt >= fromTime &&
+            createdAt <= toTime
+
           return (
             matchesSearch &&
-            matchesStatus
+            matchesStatus &&
+            matchesDateRange
           )
         }
       )
@@ -622,6 +657,8 @@ export default function SupportPage() {
       ticketsWithSearchText,
       deferredSearchTerm,
       statusFilter,
+      fromDate,
+      toDate,
     ])
 
   // ==========================================================
@@ -822,6 +859,9 @@ export default function SupportPage() {
                       note:
                         completionNote.trim() ||
                         ticket.note,
+                      resolutionNote:
+                        completionNote.trim() ||
+                        undefined,
                     }
                   : ticket
             )
@@ -850,12 +890,16 @@ export default function SupportPage() {
     useCallback(() => {
       setSearchTerm("")
       setStatusFilter("all")
+      setFromDate("")
+      setToDate("")
       setCurrentPageTickets(1)
     }, [])
 
   const hasActiveFilters =
     Boolean(searchTerm.trim()) ||
-    statusFilter !== "all"
+    statusFilter !== "all" ||
+    Boolean(fromDate) ||
+    Boolean(toDate)
 
   // ==========================================================
   // UI
@@ -1105,7 +1149,37 @@ export default function SupportPage() {
                     />
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <label className="text-xs font-medium text-gray-600">
+                      From
+                      <Input
+                        type="date"
+                        value={fromDate}
+                        max={toDate || undefined}
+                        onChange={(event) => {
+                          setFromDate(event.target.value)
+                          setCurrentPageTickets(1)
+                        }}
+                        className="mt-1 w-full sm:w-40"
+                        aria-label="Complaint date from"
+                      />
+                    </label>
+
+                    <label className="text-xs font-medium text-gray-600">
+                      To
+                      <Input
+                        type="date"
+                        value={toDate}
+                        min={fromDate || undefined}
+                        onChange={(event) => {
+                          setToDate(event.target.value)
+                          setCurrentPageTickets(1)
+                        }}
+                        className="mt-1 w-full sm:w-40"
+                        aria-label="Complaint date to"
+                      />
+                    </label>
+
                     <Select
                       value={
                         statusFilter
@@ -1340,9 +1414,17 @@ export default function SupportPage() {
                                     Complete
                                   </Button>
                                 ) : (
-                                  <Badge className="border-green-200 bg-green-100 text-green-800">
-                                    Completed
-                                  </Badge>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      setResolutionTicket(ticket)
+                                    }
+                                    className="border-green-200 text-green-700 hover:bg-green-50"
+                                  >
+                                    View Resolution
+                                  </Button>
                                 )}
                               </TableCell>
                             </TableRow>
@@ -1829,6 +1911,53 @@ export default function SupportPage() {
                   ? "Completing..."
                   : "Submit"}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resolutionTicket && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setResolutionTicket(null)
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Complaint Resolution
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Resolution marked by the admin
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setResolutionTicket(null)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="mt-4 rounded-xl border bg-gray-50 p-4">
+              <p className="text-sm font-medium text-gray-900">
+                {resolutionTicket.subject}
+              </p>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
+                {resolutionTicket.resolutionNote ||
+                  "No resolution note was added."}
+              </p>
+              {resolutionTicket.resolvedAt && (
+                <p className="mt-4 text-xs text-gray-500">
+                  Resolved {formatDateTime(resolutionTicket.resolvedAt)}
+                </p>
+              )}
             </div>
           </div>
         </div>

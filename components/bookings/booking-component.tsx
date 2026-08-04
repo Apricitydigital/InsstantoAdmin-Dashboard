@@ -177,6 +177,17 @@ export function DetailsSheet({
     }
   }, [booking?.id, db, open])
 
+  const toAmount = (value: unknown) => {
+    const amount = Number(value)
+    return Number.isFinite(amount) ? amount : 0
+  }
+
+  const financialBooking = bookingDocument
+    ? { ...booking, ...bookingDocument }
+    : booking
+  const netRevenue = toAmount(financialBooking?.amount_paid)
+    - toAmount(financialBooking?.discount_amount)
+
 
 
   // ----------------------------------------------------
@@ -240,19 +251,18 @@ export function DetailsSheet({
               </div>
             )}
             <DetailBlock label="Services" value={services?.join(", ") || "Unknown"} />
-            <DetailBlock label="Address" value={booking.bookingAddress || "—"} />
-            <DetailBlock label="otp" value={booking.otp || "—"} />
-            <DetailBlock label="Amount Paid" value={`₹${booking.amount_paid?.toLocaleString() || 0}`} />
+            <DetailBlock label="Address" value={financialBooking?.bookingAddress || "—"} />
+            <DetailBlock label="OTP" value={financialBooking?.otp || "—"} />
+            <DetailBlock label="Amount Paid" value={`₹${toAmount(financialBooking?.amount_paid).toLocaleString("en-IN")}`} />
+            <DetailBlock label="Wallet Amount Used" value={`₹${toAmount(financialBooking?.walletAmountUsed).toLocaleString("en-IN")}`} />
+            <DetailBlock label="Discount Amount" value={`₹${toAmount(financialBooking?.discount_amount).toLocaleString("en-IN")}`} />
             <DetailBlock
-              label="Wallet Amount Used"
-              value={`₹${booking.walletAmountUsed?.toLocaleString() || 0}`}
+              label="Net Revenue"
+              value={`₹${netRevenue.toLocaleString("en-IN")}`}
             />
-            <DetailBlock label="Partner Fare" value={`₹${booking.partner_fare?.toLocaleString() || 0}`} />
-            <DetailBlock label="Status" value={booking.status?.replace("_", " ")} />
-            <DetailBlock
-              label="Cancellation Reason"
-              value={bookingDocument?.cancelReason ?? booking.cancelReason}
-            />
+            <DetailBlock label="Partner Fare" value={`₹${toAmount(financialBooking?.partner_fare).toLocaleString("en-IN")}`} />
+            <DetailBlock label="Status" value={financialBooking?.status?.replace("_", " ")} />
+            <DetailBlock label="Cancellation Reason" value={financialBooking?.cancelReason} />
 
             <div>
               <div className="text-xs font-semibold uppercase tracking-widest text-gray-500">
@@ -300,25 +310,10 @@ export function DetailsSheet({
 
 
 
-<DetailBlock
-  label="Date"
-  value={booking.date?.toDate?.().toLocaleString("en-IN")}
-/>
-
-<DetailBlock
-  label="Time Slot"
-  value={booking.timeSlot?.toDate?.().toLocaleString("en-IN")}
-/>
-
-<DetailBlock
-  label="Start Time"
-  value={booking.startTime?.toDate?.().toLocaleString("en-IN")}
-/>
-
-<DetailBlock
-  label="End Time"
-  value={booking.endTime?.toDate?.().toLocaleString("en-IN")}
-/>
+            <DetailBlock label="Date" value={financialBooking?.date?.toDate?.().toLocaleString("en-IN")} />
+            <DetailBlock label="Time Slot" value={financialBooking?.timeSlot?.toDate?.().toLocaleString("en-IN")} />
+            <DetailBlock label="Start Time" value={financialBooking?.startTime?.toDate?.().toLocaleString("en-IN")} />
+            <DetailBlock label="End Time" value={financialBooking?.endTime?.toDate?.().toLocaleString("en-IN")} />
             <hr className="my-3 opacity-40" />
 
             {/* LOADING STATE */}

@@ -14,6 +14,7 @@ export interface SupportTicket {
   updatedAt: string
   resolvedAt?: string
   note: string
+  resolutionNote?: string
 }
 
 export interface Review {

@@ -248,7 +248,10 @@ export async function fetchTopCategories(
       if (!mapping) return;
 
       const { serviceName, categoryName } = mapping;
-      const amount = Number(booking.amount_paid || 0);
+      const amount =
+        Number(booking.amount_paid || 0) +
+        Number(booking.walletAmountUsed || 0) +
+        Number(booking.discount_amount || 0);
 
       if (!categoryStats[categoryName]) {
         categoryStats[categoryName] = {

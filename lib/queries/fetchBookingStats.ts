@@ -48,6 +48,8 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
             customer_id?: { id?: string } | null
             status?: string
             amount_paid?: number
+            walletAmountUsed?: number
+            discount_amount?: number
         })
         .filter(booking => {
             const providerId = booking.provider_id?.id
@@ -68,7 +70,10 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     const cancelled = realBookings.filter(booking => booking.status === "Cancelled").length
     const cancelledByCustomer = cancelled
     const totalRevenue = completedBookings.reduce(
-        (sum, booking) => sum + (booking.amount_paid || 0),
+        (sum, booking) => sum
+            + (booking.amount_paid || 0)
+            + (booking.walletAmountUsed || 0)
+            + (booking.discount_amount || 0),
         0
     )
 

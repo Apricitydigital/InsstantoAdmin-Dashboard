@@ -58,6 +58,7 @@ type BookingDoc = {
     cartClone_id?: any
     itemOptions_id?: any
     walletAmountUsed?: any
+    discount_amount?: any
     partner_fare?: any
     bookingAddress?: any
 }
@@ -71,6 +72,11 @@ interface PartnerBookingsSectionProps {
 }
 
 const PAGE_SIZE = 10
+
+const toAmount = (value: unknown) => {
+    const amount = Number(value)
+    return Number.isFinite(amount) ? amount : 0
+}
 
 // ==========================================================
 // START COMPONENT
@@ -89,6 +95,7 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
     // filters
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
+    const [revenueFilter, setRevenueFilter] = useState("all")
     const [currentPage, setCurrentPage] = useState(1)
 
     // ==========================================================
@@ -356,10 +363,19 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
 
             const matchesSearch = !term || text.includes(term)
             const matchesStatus = statusFilter === "all" || booking.status?.toLowerCase() === statusFilter.toLowerCase()
+            const amountPaid = toAmount(booking.amount_paid)
+            const walletAmount = toAmount(booking.walletAmountUsed)
+            const netRevenue = amountPaid
+            const hasNegativeRevenue = netRevenue < 0
+            const isFullyWalletPaid = walletAmount > 0 && Math.abs(amountPaid - walletAmount) < 0.01
+            const matchesRevenue = revenueFilter === "all"
+                || (revenueFilter === "issues" && (hasNegativeRevenue || isFullyWalletPaid))
+                || (revenueFilter === "negative" && hasNegativeRevenue)
+                || (revenueFilter === "wallet_equal" && isFullyWalletPaid)
 
-            return matchesSearch && matchesStatus
+            return matchesSearch && matchesStatus && matchesRevenue
         })
-    }, [filteredByDate, searchTerm, statusFilter, servicesMap, customerMap])
+    }, [filteredByDate, searchTerm, statusFilter, revenueFilter, servicesMap, customerMap])
 
     // ==========================================================
     // PAGINATION
@@ -377,7 +393,7 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
 
     useEffect(() => {
         setCurrentPage(1)
-    }, [searchTerm, statusFilter, fromDate, toDate])
+    }, [searchTerm, statusFilter, revenueFilter, fromDate, toDate])
 
     const goNext = () => { if (hasNextPage) setCurrentPage(prev => prev + 1) }
     const goPrev = () => { if (hasPrevPage) setCurrentPage(prev => prev - 1) }
@@ -438,14 +454,31 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
     // STATS (Use date-filtered bookings)
     // ==========================================================
 
-    const stats = {
-        total: filteredByDate.length,
-        completed: filteredByDate.filter(b => b.status?.toLowerCase() === "service_completed").length,
-        pending: filteredByDate.filter(b => b.status?.toLowerCase() === "pending").length,
-        revenue: filteredByDate
-            .filter(b => b.status?.toLowerCase() === "service_completed")
-            .reduce((sum, b) => sum + (b.amount_paid || 0), 0),
-    }
+    const stats = useMemo(() => {
+        const completedBookings = filteredByDate.filter(
+            b => b.status?.toLowerCase() === "service_completed"
+        )
+        return {
+            total: filteredByDate.length,
+            completed: completedBookings.length,
+            revenue: completedBookings.reduce(
+                (sum, b) => sum
+                    + toAmount(b.amount_paid)
+                    + toAmount(b.walletAmountUsed)
+                    + toAmount(b.discount_amount),
+                0
+            ),
+            netRevenue: completedBookings.reduce(
+                (sum, b) => sum
+                    + toAmount(b.amount_paid),
+                0
+            ),
+            partnerFare: completedBookings.reduce(
+                (sum, b) => sum + toAmount(b.partner_fare),
+                0
+            ),
+        }
+    }, [filteredByDate])
 
     // ==========================================================
     // RENDER
@@ -466,14 +499,16 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
             {/* =======================
                 KPI CARDS
             ======================= */}
-            <div className="grid gap-2 md:grid-cols-5">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
                 <Card><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-blue-100 rounded-lg"><Calendar className="w-5 h-5 text-blue-600" /></div><div><p className="text-sm font-medium">Total Bookings</p><p className="text-2xl font-bold">{stats.total}</p></div></div></CardContent></Card>
 
                 <Card><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-green-100 rounded-lg"><CheckCircle className="w-5 h-5 text-green-600" /></div><div><p className="text-sm font-medium">Completed</p><p className="text-2xl font-bold">{stats.completed}</p></div></div></CardContent></Card>
 
-                <Card><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-yellow-100 rounded-lg"><Clock className="w-5 h-5 text-yellow-600" /></div><div><p className="text-sm font-medium">Pending</p><p className="text-2xl font-bold">{stats.pending}</p></div></div></CardContent></Card>
+                <Card><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-yellow-100 rounded-lg"><BarChart3 className="w-5 h-5 text-yellow-600" /></div><div><p className="text-sm font-medium">Net Revenue</p><p className="text-2xl font-bold">{formatCurrency(stats.netRevenue)}</p></div></div></CardContent></Card>
 
                 <Card><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-purple-100 rounded-lg"><BarChart3 className="w-5 h-5 text-purple-600" /></div><div><p className="text-sm font-medium">Revenue</p><p className="text-2xl font-bold">{formatCurrency(stats.revenue)}</p></div></div></CardContent></Card>
+
+                <Card><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-cyan-100 rounded-lg"><BarChart3 className="w-5 h-5 text-cyan-600" /></div><div><p className="text-sm font-medium">Partner Fare</p><p className="text-2xl font-bold">{formatCurrency(stats.partnerFare)}</p></div></div></CardContent></Card>
 
                 {/* ⭐ NEW KPI CARD – TOTAL JOBS */}
                 <Card>
@@ -534,6 +569,20 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
                                     <option value="in-progress">In Progress</option>
                                     <option value="service_completed">Completed</option>
                                     <option value="cancelled">Cancelled</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+                            </div>
+                            <div className="relative shrink-0">
+                                <select
+                                    aria-label="Booking revenue"
+                                    value={revenueFilter}
+                                    onChange={(event) => setRevenueFilter(event.target.value)}
+                                    className="border-input bg-background h-9 w-[170px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                >
+                                    <option value="all">All Revenue</option>
+                                    <option value="issues">Revenue Issues</option>
+                                    <option value="negative">Negative Revenue</option>
+                                    <option value="wallet_equal">Amount = Wallet</option>
                                 </select>
                                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
                             </div>

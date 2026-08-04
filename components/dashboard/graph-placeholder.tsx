@@ -19,7 +19,7 @@ import {
   ResponsiveContainer,
   LabelList,
 } from "recharts"
-import { collection, query, where, getDocs, doc, Timestamp, limit } from "firebase/firestore"
+import { collection, query, where, getDocs, doc, Timestamp } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
 import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
@@ -98,15 +98,7 @@ export function GraphPlaceholder({
       )
     )
 
-    // Both reads are independent, so start them together to reduce load time.
-    const [snap, walletConfigSnap] = await Promise.all([
-      getDocs(q),
-      getDocs(query(collection(db, "adminAddamountinWallet"), limit(1))),
-    ])
-
-    const setWalletAmountTo = walletConfigSnap.empty
-      ? 0
-      : Number(walletConfigSnap.docs[0].data().SetWalletAmountTo || 0)
+    const snap = await getDocs(q)
 
     const revenueByMonth: RevenuePoint[] = monthBuckets.map((m) => ({
       month: m.label,
@@ -128,17 +120,15 @@ export function GraphPlaceholder({
       const wallet = Number(b?.walletAmountUsed ?? 0) || 0
       const discount = Number(b?.discount_amount ?? 0) || 0
 
-      const walletOfferAmount = Math.min(wallet, setWalletAmountTo)
-
-      const bookingNetRevenue = amt - walletOfferAmount - discount
+      const bookingRevenue = amt + wallet + discount
 
       const idx = monthBuckets.findIndex((m) => when >= m.start && when < m.end)
 
       if (idx !== -1) {
-        revenueByMonth[idx].revenue += amt
-        revenueByMonth[idx].walletUsed += walletOfferAmount
+        revenueByMonth[idx].revenue += bookingRevenue
+        revenueByMonth[idx].walletUsed += wallet
         revenueByMonth[idx].discount += discount
-        revenueByMonth[idx].netRevenue += bookingNetRevenue
+        revenueByMonth[idx].netRevenue += amt
 
       }
     })

@@ -286,6 +286,12 @@ function buildSupportTicket(
     data.complaint_status
   )
 
+  const resolutionNote =
+    extractResolutionNote(
+      data.complaint_history,
+      data.notefrom_Insstanto
+    )
+
   return {
     id,
 
@@ -327,6 +333,8 @@ function buildSupportTicket(
       data.notefrom_Insstanto ||
       "-",
 
+    resolutionNote,
+
     description: extractDescription(
       data.complaint_history,
       data.customer_complaint
@@ -345,6 +353,37 @@ function buildSupportTicket(
         ? updatedAt
         : undefined,
   }
+}
+
+function extractResolutionNote(
+  complaintHistory: unknown,
+  legacyNote?: string
+): string | undefined {
+  if (Array.isArray(complaintHistory)) {
+    for (
+      let index = complaintHistory.length - 1;
+      index >= 0;
+      index -= 1
+    ) {
+      const entry = complaintHistory[index] as {
+        message?: string
+        note?: string
+        status?: string
+      }
+
+      if (
+        entry.status?.toLowerCase() === "resolved" &&
+        (entry.message?.trim() || entry.note?.trim())
+      ) {
+        return (
+          entry.message?.trim() ||
+          entry.note?.trim()
+        )
+      }
+    }
+  }
+
+  return legacyNote?.trim() || undefined
 }
 
 // ============================================================

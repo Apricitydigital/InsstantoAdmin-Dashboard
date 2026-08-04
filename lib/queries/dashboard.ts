@@ -501,8 +501,7 @@ function filterBookingsByStatus(
 }
 
 function calculateRevenueData(
-  completedBookings: BookingData[],
-  walletOfferLimit: number
+  completedBookings: BookingData[]
 ) {
   let totalRevenue = 0
   let walletOfferAmount = 0
@@ -513,18 +512,18 @@ function calculateRevenueData(
       booking.amount_paid
     )
 
-    const walletUsed = Math.min(
-      toNumber(
-        booking.walletAmountUsed
-      ),
-      walletOfferLimit
+    const walletUsed = toNumber(
+      booking.walletAmountUsed
     )
 
     const discount = toNumber(
       booking.discount_amount
     )
 
-    totalRevenue += amountPaid
+    totalRevenue +=
+      amountPaid +
+      walletUsed +
+      discount
     walletOfferAmount += walletUsed
     discountAmount += discount
   }
@@ -533,9 +532,11 @@ function calculateRevenueData(
     walletOfferAmount +
     discountAmount
 
-  const netRevenue =
-    totalRevenue -
-    totalOfferAmount
+  const netRevenue = completedBookings.reduce(
+    (sum, booking) =>
+      sum + toNumber(booking.amount_paid),
+    0
+  )
 
   const perOrderValue =
     completedBookings.length > 0
@@ -551,22 +552,6 @@ function calculateRevenueData(
     netRevenue,
     perOrderValue,
   }
-}
-
-async function fetchWalletOfferLimit(): Promise<number> {
-  const db = getFirestoreDb()
-  const walletConfigSnapshot = await getDocs(
-    collection(db, "adminAddamountinWallet")
-  )
-
-  if (walletConfigSnapshot.empty) {
-    return 0
-  }
-
-  return toNumber(
-    walletConfigSnapshot.docs[0].data()
-      .SetWalletAmountTo
-  )
 }
 
 // ============================================================
@@ -1042,7 +1027,6 @@ export async function fetchBookingStats(
     previousCustomerCount,
     expenseByMonth,
     pnlRows,
-    walletOfferLimit,
   ] = await Promise.all([
     fetchBookingsForRange(
       providerReferences,
@@ -1081,17 +1065,6 @@ export async function fetchBookingStats(
         )
 
         return []
-      }
-    ),
-
-    fetchWalletOfferLimit().catch(
-      (error) => {
-        console.error(
-          "Error loading wallet offer limit:",
-          error
-        )
-
-        return 0
       }
     ),
   ])
@@ -1174,14 +1147,12 @@ export async function fetchBookingStats(
 
   const currentRevenue =
     calculateRevenueData(
-      completedBookingData,
-      walletOfferLimit
+      completedBookingData
     )
 
   const previousRevenue =
     calculateRevenueData(
-      previousCompletedBookingData,
-      walletOfferLimit
+      previousCompletedBookingData
     )
 
   // ----------------------------------------------------------
