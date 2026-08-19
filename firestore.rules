@@ -2,18 +2,134 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
 
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function roleData() {
+      return get(/databases/$(database)/documents/roles/$(userData().roleId)).data;
+    }
+
+    function tokenHasRole(role) {
+      return signedIn()
+        && 'roleId' in request.auth.token
+        && request.auth.token.roleId == role;
+    }
+
+    function userHasRole(role) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userData().roleId == role;
+    }
+
+    function customerHasRole(role) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/customer/$(request.auth.uid))
+        && get(/databases/$(database)/documents/customer/$(request.auth.uid)).data.roleId == role;
+    }
+
+    function hasRole(role) {
+      return tokenHasRole(role) || userHasRole(role) || customerHasRole(role);
+    }
+
+    function isSuperAdmin() {
+      return hasRole('superadmin');
+    }
+
+    function canViewDashboard() {
+      return isSuperAdmin() || hasRole('admin');
+    }
+
+    function isStoreManager() {
+      return hasRole('store_manager');
+    }
+
+    function hasPermission(permission) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && exists(/databases/$(database)/documents/roles/$(userData().roleId))
+        && roleData().permissions.hasAny([permission]);
+    }
+
+    // Customers and admins must be able to read coverage. Only verified admin
+    // roles (or a role explicitly granted services:write) may change it.
+    match /service_coverage/{cityId} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+
+      match /Categories/{categoryId} {
+        allow read: if signedIn();
+        allow write: if isSuperAdmin();
+
+        match /service_hubs/{hubId} {
+          allow read: if signedIn();
+          allow write: if isSuperAdmin();
+        }
+      }
+    }
+
+    // The catalogue is displayed in the admin and already consumed by the
+    // customer application. Catalogue mutation is outside this screen.
+    match /service_subcategories/{docId} { allow read: if signedIn(); }
+    match /service_SubCategoriesItems/{docId} { allow read: if signedIn(); }
+    match /service_subCategoriesItems/{docId} { allow read: if signedIn(); }
+    match /itemOptions/{docId} { allow read: if signedIn(); }
+    match /service_packages/{docId} { allow read: if signedIn(); }
+    match /Service_Categories/{docId} { allow read: if signedIn(); }
+    match /service_categories/{docId} { allow read: if signedIn(); }
+
+    match /bookings/{docId} {
+      allow read: if canViewDashboard();
+      allow write: if isSuperAdmin();
+    }
+    match /payments/{docId} {
+      allow read: if canViewDashboard();
+      allow write: if isSuperAdmin();
+    }
+    match /store/{docId} {
+      allow read: if canViewDashboard() || isStoreManager();
+      allow write: if isSuperAdmin();
+    }
+    match /coupons/{docId} {
+      allow read: if canViewDashboard();
+      allow write: if isSuperAdmin();
+    }
+    match /customers/{docId} {
+      allow read: if canViewDashboard();
+      allow write: if isSuperAdmin();
+    }
+    match /complaints/{docId} {
+      allow read: if canViewDashboard();
+      allow write: if isSuperAdmin();
+    }
+    match /roles/{docId} {
+      allow read: if canViewDashboard();
+      allow write: if isSuperAdmin();
+    }
+    match /users/{docId} {
+      allow read: if signedIn() && (request.auth.uid == docId || canViewDashboard());
+      allow write: if isSuperAdmin();
+    }
+
+    match /store_items/{docId} {
+      allow read: if canViewDashboard() || isStoreManager();
+      allow write: if isSuperAdmin();
+    }
+
+    match /chemical_purchase_record/{docId} {
+      allow read: if canViewDashboard() || isStoreManager();
+      allow write: if isSuperAdmin();
+    }
+
+    // Admin and superadmin can read every dashboard collection. Only the
+    // superadmin role receives dashboard-wide mutation rights.
     match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2024, 12, 18);
+      allow read: if canViewDashboard();
+      allow write: if isSuperAdmin();
     }
   }
 }

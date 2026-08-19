@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -21,6 +22,9 @@ import {
   ChevronRight,
   Menu,
   CreditCard,
+  Wrench,
+  User,
+  LogOut,
 } from "lucide-react"
 
 const navigation = [
@@ -30,6 +34,7 @@ const navigation = [
   { name: "Booking & Scheduling", href: "/bookings", icon: Calendar },
   { name: "Payment Management", href: "/payments", icon: CreditCard },
   { name: "Coupons & Offers", href: "/coupons", icon: Ticket },
+  { name: "Services & Coverage", href: "/services", icon: Wrench },
   { name: "Complaints & Support", href: "/support", icon: MessageSquare },
   { name: "AI Data Assistant", href: "/chatbot", icon: MessageSquare },
   { name: "Store", href: "/store", icon: Store },
@@ -52,9 +57,45 @@ interface SidebarProps {
 
 export function AdminSidebar({ className }: SidebarProps) {
   const pathname = usePathname()
+  const { user, logout } = useAuth()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [isHovered, setIsHovered] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const visibleNavigation = user?.role === "store_manager"
+    ? navigation.filter((item) => item.href === "/store")
+    : navigation
+  const homeHref = user?.role === "store_manager" ? "/store" : "/"
+
+  const handleLogout = async () => {
+    await logout()
+    window.location.href = "/login"
+  }
+
+  const AccountFooter = ({ collapsed = false }: { collapsed?: boolean }) => (
+    <div className="sticky bottom-0 mt-auto shrink-0 border-t bg-sidebar p-2 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+      <div className={cn("flex items-center gap-3 px-2 py-2", collapsed && "justify-center px-0")} title={collapsed ? user?.email || "Account" : undefined}>
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <User className="h-4 w-4" />
+          </span>
+          {!collapsed && (
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-sm font-medium">{user?.name || "Account"}</span>
+              <span className="block truncate text-xs font-normal text-muted-foreground">{user?.email}</span>
+              <span className="block truncate text-xs capitalize text-muted-foreground">{user?.role?.replaceAll("_", " ")}</span>
+            </span>
+          )}
+      </div>
+      <Button
+        variant="ghost"
+        className={cn("w-full text-destructive hover:bg-destructive/10 hover:text-destructive", collapsed ? "justify-center px-0" : "justify-start")}
+        onClick={() => void handleLogout()}
+        title={collapsed ? "Logout" : undefined}
+      >
+        <LogOut className={cn("h-4 w-4", !collapsed && "mr-2")} />
+        {!collapsed && "Logout"}
+      </Button>
+    </div>
+  )
 
   // Load collapsed state from localStorage on mount
   useEffect(() => {
@@ -84,15 +125,15 @@ export function AdminSidebar({ className }: SidebarProps) {
   }
 
   const CollapsedSidebarContent = () => (
-    <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center justify-center border-b lg:h-[60px]">
-        <Link href="/" className="flex items-center">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+      <div className="flex h-[60px] min-h-[60px] shrink-0 items-center justify-center border-b">
+        <Link href={homeHref} className="flex items-center">
           <Package className="h-6 w-6 text-primary" />
         </Link>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <nav className="grid items-start gap-1 px-2 py-3 text-sm font-medium">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const isActive =
               pathname === item.href ||
               pathname.startsWith(item.href + "/") ||
@@ -114,22 +155,23 @@ export function AdminSidebar({ className }: SidebarProps) {
           })}
         </nav>
       </ScrollArea>
+      <AccountFooter collapsed />
     </div>
   )
 
   const SidebarContent = () => (
-    <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold flex-1">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+      <div className="flex h-[60px] min-h-[60px] shrink-0 items-center border-b px-4 lg:px-6">
+        <Link href={homeHref} className="flex items-center gap-2 font-semibold flex-1">
           <Package className="h-7 w-7 text-primary" />
           <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             Insstanto
           </span>
         </Link>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <nav className="grid items-start gap-1 px-2 py-3 text-sm font-medium lg:px-3">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const isActive =
               pathname === item.href ||
               pathname.startsWith(item.href + "/") ||
@@ -184,6 +226,7 @@ export function AdminSidebar({ className }: SidebarProps) {
           })}
         </nav>
       </ScrollArea>
+      <AccountFooter />
     </div>
   )
 

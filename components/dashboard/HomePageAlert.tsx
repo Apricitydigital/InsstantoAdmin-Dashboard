@@ -10,7 +10,7 @@ import {
   Timestamp,
   limit,
 } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getFirestoreDb } from "@/lib/firebase";
 
 import {
@@ -66,8 +66,6 @@ function getTimestampDate(value: any): Date | null {
 
 export default function HomePageAlert() {
   const db = getFirestoreDb();
-  const router = useRouter();
-
   const [open, setOpen] = useState(false);
 
   const [bookings, setBookings] = useState(0);
@@ -392,7 +390,7 @@ export default function HomePageAlert() {
       borderClass: "border-yellow-200",
       items: latestReviews,
       actionLabel: "View reviews",
-      path: "/reviews",
+      path: "/support",
     },
     {
       key: "payments",
@@ -416,7 +414,7 @@ export default function HomePageAlert() {
       borderClass: "border-purple-200",
       items: latestSubscriptions,
       actionLabel: "View subscriptions",
-      path: "/customers/subscriptions",
+      path: "/customers",
     },
   ].filter((item) => item.count > 0);
 
@@ -549,16 +547,11 @@ export default function HomePageAlert() {
                 )}
 
                 <div className="mt-3 flex justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setOpen(false);
-                      router.push(card.path);
-                    }}
-                  >
-                    {card.actionLabel}
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={card.path} onClick={() => setOpen(false)}>
+                      {card.actionLabel}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
                   </Button>
                 </div>
               </div>

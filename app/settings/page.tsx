@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Settings, Users, DollarSign, Zap, Webhook, Shield } from "lucide-react"
+import { useAuth } from "@/lib/auth"
 
 export default function SettingsPage() {
+  const { hasPermission } = useAuth()
+  const canEdit = hasPermission("settings:write")
   return (
     <div className="flex h-screen bg-gray-50">
       <AdminSidebar />
@@ -74,7 +77,7 @@ export default function SettingsPage() {
                   <Settings className="w-16 h-16 mx-auto mb-4 opacity-50" />
                   <h3 className="text-lg font-medium mb-2">System Configuration</h3>
                   <p className="mb-4">Configure basic system settings and preferences</p>
-                  <Button>Configure Settings</Button>
+                  {canEdit && <Button>Configure Settings</Button>}
                 </div>
               </CardContent>
             </Card>

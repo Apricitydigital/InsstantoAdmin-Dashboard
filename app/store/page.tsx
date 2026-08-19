@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table } from "@/components/ui/table"
 import { Package, ShoppingCart, Users, Plus, TrendingUp, ArrowLeft, ArrowRight } from "lucide-react"
+import { useAuth } from "@/lib/auth"
 
 /* ---------- TYPES ---------- */
 interface StoreItem {
@@ -47,6 +48,8 @@ interface ChemicalPurchase {
 /* ---------- MAIN COMPONENT ---------- */
 export default function StorePage() {
   const db = getFirestoreDb()
+  const { hasPermission } = useAuth()
+  const canEdit = hasPermission("store:write")
 
   const [products, setProducts] = useState<StoreItem[]>([])
   const [orders, setOrders] = useState<ChemicalPurchase[]>([])
@@ -214,9 +217,9 @@ const fetchOrders = async (next = false) => {
 
   /* ---------- RENDER ---------- */
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-gray-50">
       <AdminSidebar />
-      <div className="min-w-0 flex-1 space-y-6 overflow-auto p-4 sm:p-6">
+      <div className="min-w-0 max-w-full flex-1 space-y-6 overflow-x-hidden p-4 sm:p-6">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
@@ -225,14 +228,16 @@ const fetchOrders = async (next = false) => {
               Manage partner supplies, inventory, and vendor relationships
             </p>
           </div>
-          <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Product
-          </Button>
+          {canEdit && (
+            <Button className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Product
+            </Button>
+          )}
         </div>
 
         {/* KPI CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid w-full min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {kpiLoading ? (
             <p>Loading KPI data...</p>
           ) : (
@@ -272,7 +277,7 @@ const fetchOrders = async (next = false) => {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="orders" className="space-y-6">
+        <Tabs defaultValue="orders" className="w-full min-w-0 space-y-6">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-3">
             <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
@@ -280,7 +285,7 @@ const fetchOrders = async (next = false) => {
           </TabsList>
 
           {/* Inventory Table */}
-          <TabsContent value="inventory" className="space-y-4">
+          <TabsContent value="inventory" className="w-full min-w-0 space-y-4">
             <DataCard
               title="Inventory Management"
               description="All products available in the store"
@@ -299,7 +304,7 @@ const fetchOrders = async (next = false) => {
           </TabsContent>
 
           {/* Orders Table */}
-          <TabsContent value="orders" className="space-y-4">
+          <TabsContent value="orders" className="w-full min-w-0 space-y-4">
             <DataCard
               title="Partner Orders"
               description="Orders placed by service partners"
@@ -349,7 +354,7 @@ function KpiCard({ icon, value, label, color }: any) {
   }
 
   return (
-    <Card className={`bg-gradient-to-br ${colorMap[color]} border`}>
+    <Card className={`min-w-0 bg-gradient-to-br ${colorMap[color]} border`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           {icon}
@@ -364,7 +369,7 @@ function KpiCard({ icon, value, label, color }: any) {
 
 function DataCard({ title, description, data, columns, loading, onNext, page }: any) {
   return (
-    <Card>
+    <Card className="w-full min-w-0">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -374,8 +379,8 @@ function DataCard({ title, description, data, columns, loading, onNext, page }: 
           <p>Loading...</p>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <Table className="min-w-full border border-gray-200 text-sm">
+            <div className="w-full overflow-x-auto">
+              <Table className="w-full min-w-full border border-gray-200 text-sm">
                 <thead className="bg-gray-100 text-gray-700">
                   <tr>
                     {columns.map((col: any) => (

@@ -11,11 +11,11 @@ type CanProps = {
 }
 
 export function Can({ permission, orPermissions, children, fallback = null }: CanProps) {
-  const { permissions } = useAuth()
+  const { hasPermission } = useAuth()
 
   const allowed =
-    (permission && permissions.includes(permission)) ||
-    (orPermissions && orPermissions.some((p) => permissions.includes(p)))
+    (permission && hasPermission(permission)) ||
+    (orPermissions && orPermissions.some((item) => hasPermission(item)))
 
   return <>{allowed ? children : fallback}</>
 }

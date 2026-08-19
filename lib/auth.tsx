@@ -41,21 +41,25 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "complaints:write",
     "analytics:view",
     "partners:manage",
+    "services:view",
+    "services:write",
   ],
   admin: [
     "bookings:view",
-    "bookings:write",
     "payments:view",
     "store:view",
     "coupons:view",
     "customers:view",
+    "customers:view_limited",
     "complaints:view",
     "analytics:view",
-    "partners:manage",
+    "partners:view",
+    "services:view",
+    "reports:view",
+    "chatbot:view",
+    "settings:view",
   ],
-  store_manager: ["store:view", "store:write"],
-  accounts_manager: ["payments:view", "payments:write", "bookings:view", "bookings:write"],
-  marketing_manager: ["coupons:view", "bookings:view", "customers:view_limited", "complaints:view"],
+  store_manager: ["store:view"],
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -80,21 +84,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fbUser.getIdToken(true)
         } catch {}
 
-        const userSnap = await getDoc(doc(db, "users", fbUser.uid))
-        const roleId = (userSnap.exists() && (userSnap.data().roleId as string)) || "admin"
+        const tokenResult = await fbUser.getIdTokenResult()
+        let profile: Record<string, unknown> = {}
+        try {
+          const userSnap = await getDoc(doc(db, "users", fbUser.uid))
+          if (userSnap.exists()) profile = userSnap.data()
+        } catch (error) {
+          console.warn("[auth] could not read users profile", error)
+        }
+
+        const claimedRole = typeof tokenResult.claims.roleId === "string" ? tokenResult.claims.roleId : ""
+        const profileRole = typeof profile.roleId === "string" ? profile.roleId : ""
+        const roleId = (claimedRole || profileRole || "unauthorized").trim().toLowerCase()
         const displayName =
-          (userSnap.exists() && (userSnap.data().name as string)) ||
+          (typeof profile.name === "string" && profile.name) ||
           fbUser.displayName ||
           fbUser.email?.split("@")[0] ||
           "User"
 
-        let permissions: string[] = []
-        const roleSnap = await getDoc(doc(db, "roles", roleId))
-        if (roleSnap.exists()) {
-          permissions = (roleSnap.data().permissions as string[]) || []
-        } else {
-          permissions = DEFAULT_ROLE_PERMISSIONS[roleId] || []
-        }
+        const permissions = DEFAULT_ROLE_PERMISSIONS[roleId] || []
 
         setUser({
           id: fbUser.uid,
@@ -119,9 +127,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const auth = getFirebaseAuth()
       await signInWithEmailAndPassword(auth, email, password)
-      // onAuthStateChanged will hydrate the user
-    } finally {
+      // Do not clear isLoading here. Firebase authentication completes before
+      // onAuthStateChanged finishes hydrating the Firestore role/profile. The
+      // observer above clears it only after setUser has completed.
+    } catch (error) {
       setIsLoading(false)
+      throw error
     }
   }
 
@@ -133,8 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = (permission: string): boolean => {
     if (!user) return false
-    // superadmin/admin bypass checks
-    if (user.role === "superadmin" || user.role === "admin") return true
+    if (user.role === "superadmin") return true
+    if (user.role === "admin") return DEFAULT_ROLE_PERMISSIONS.admin.includes(permission)
+    if (user.role === "store_manager") return permission === "store:view"
     return user.permissions.includes(permission)
   }
 

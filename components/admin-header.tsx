@@ -1,18 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Bell, User, LogOut } from "lucide-react"
+import { Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { useAuth } from "@/lib/auth"
 import { collection, onSnapshot, query, where } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 
@@ -28,7 +20,6 @@ type NotificationItem = {
 }
 
 export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
-  const { user, logout } = useAuth()
   const db = getFirestoreDb()
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -73,11 +64,6 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
       unsubComplaints()
     }
   }, [db])
-
-  const handleLogout = () => {
-    logout()
-    window.location.href = "/login"
-  }
 
   return (
     <header
@@ -139,38 +125,6 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
           </PopoverContent>
         </Popover>
 
-        {/* 👤 User Menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="size-9 p-0">
-              <User className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">
-                  {user?.name}
-                </p>
-                <p className="text-xs leading-none text-muted-foreground">
-                  {user?.email}
-                </p>
-                <Badge variant="secondary" className="w-fit text-xs capitalize">
-                  {user?.role}
-                </Badge>
-              </div>
-            </DropdownMenuLabel>
-
-            <DropdownMenuItem
-              onClick={handleLogout}
-              className="text-destructive"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </header>
   )

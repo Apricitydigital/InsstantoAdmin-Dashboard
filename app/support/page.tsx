@@ -68,6 +68,7 @@ import {
 
 import type { SupportTicket } from "@/types/support"
 import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
+import { useAuth } from "@/lib/auth"
 
 // ============================================================
 // CONSTANTS
@@ -206,6 +207,8 @@ function getStatusLabel(
 // ============================================================
 
 export default function SupportPage() {
+  const { hasPermission } = useAuth()
+  const canEdit = hasPermission("complaints:write")
   // ----------------------------------------------------------
   // FILTER STATES
   // ----------------------------------------------------------
@@ -816,7 +819,7 @@ export default function SupportPage() {
 
   const handleCompleteComplaint =
     useCallback(async () => {
-      if (!selectedTicket) {
+      if (!canEdit || !selectedTicket) {
         return
       }
 
@@ -878,6 +881,7 @@ export default function SupportPage() {
         setUpdatingTicket(false)
       }
     }, [
+      canEdit,
       completionNote,
       selectedTicket,
     ])
@@ -1400,8 +1404,8 @@ export default function SupportPage() {
                               </TableCell>
 
                               <TableCell className="text-right">
-                                {ticket.status !==
-                                "resolved" ? (
+                                {ticket.status !== "resolved" ? (
+                                  canEdit ? (
                                   <Button
                                     size="sm"
                                     className="bg-green-600 hover:bg-green-700"
@@ -1413,6 +1417,9 @@ export default function SupportPage() {
                                   >
                                     Complete
                                   </Button>
+                                  ) : (
+                                    <span className="text-sm text-gray-400">View only</span>
+                                  )
                                 ) : (
                                   <Button
                                     type="button"
@@ -1683,12 +1690,11 @@ export default function SupportPage() {
                               </TableCell>
 
                               <TableCell className="text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                >
-                                  Moderate
-                                </Button>
+                                {canEdit && (
+                                  <Button variant="outline" size="sm">
+                                    Moderate
+                                  </Button>
+                                )}
                               </TableCell>
                             </TableRow>
                           )
@@ -1786,7 +1792,7 @@ export default function SupportPage() {
           COMPLETE COMPLAINT MODAL
       ==================================================== */}
 
-      {selectedTicket && (
+      {canEdit && selectedTicket && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onMouseDown={(
