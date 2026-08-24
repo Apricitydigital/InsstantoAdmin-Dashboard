@@ -128,6 +128,9 @@ export default function PartnerDetailsPage() {
   const [workingDays, setWorkingDays] = useState(0)
   const [nonWorkingDays, setNonWorkingDays] = useState(0)
 
+  const [aiSummary, setAiSummary] = useState("")
+const [aiLoading, setAiLoading] = useState(false)
+
   // ✅ Subscription states
   const [subscriptionInfo, setSubscriptionInfo] =
     useState<PartnerSubscriptionDoc | null>(null)
@@ -451,6 +454,38 @@ export default function PartnerDetailsPage() {
       .toUpperCase()
       .slice(0, 2)
   }
+const generateAISummary = async () => {
+  try {
+    setAiLoading(true)
+
+    const res = await fetch("/api/ai/partner-summary", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        partnerId,
+        stats: {
+          partnerName: partner?.display_name || partner?.customer_name || "Partner",
+          totalBookings: partner?.totalBookings || 0,
+          completedBookings: partner?.completedBookings || 0,
+          totalEarnings: walletInfo?.filteredEarnings || 0,
+          workingDays,
+          nonWorkingDays,
+          averageRating: partner?.ratings_average || 0,
+          totalReviews: partner?.total_reviews || 0,
+        },
+      }),
+    })
+
+    const data = await res.json()
+    setAiSummary(data.aiSummary || data.message || "No summary received")
+  } catch (error) {
+    console.error("AI Summary Error:", error)
+  } finally {
+    setAiLoading(false)
+  }
+}
 
   const getStatusBadge = (status?: string) => {
     switch (status?.toLowerCase()) {
@@ -881,6 +916,46 @@ export default function PartnerDetailsPage() {
                 </CardContent>
               </Card>
             </div>
+
+   {/* <Card>
+  <CardHeader>
+    <CardTitle>AI Partner Performance Summary</CardTitle>
+  </CardHeader>
+
+  <CardContent className="space-y-4">
+    <Button
+      type="button"
+      onClick={() => {
+        console.log("AI button clicked")
+        generateAISummary()
+      }}
+      disabled={aiLoading}
+      className="w-full sm:w-auto"
+    >
+      {aiLoading ? "Generating..." : "Generate AI Summary"}
+    </Button>
+
+    {aiLoading && (
+      <div className="text-sm text-muted-foreground">
+        AI is analyzing partner performance...
+      </div>
+    )}
+
+    {aiSummary && (
+      <div className="rounded-lg border bg-muted/40 p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-sm font-semibold">
+            AI Generated Insights
+          </span>
+        </div>
+
+        <div className="whitespace-pre-line text-sm leading-6">
+          {aiSummary}
+        </div>
+      </div>
+    )}
+  </CardContent>
+</Card> */}
 
             {/* Detailed Sections */}
             <Card>

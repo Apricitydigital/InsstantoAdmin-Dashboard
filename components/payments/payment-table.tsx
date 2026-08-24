@@ -17,6 +17,9 @@ type RecordType = {
   utr: string | null;
   date: string;
   parentPayment?: string;
+
+  parent_amount?: number;
+  parentAmount?: number;
 };
 
 export default function PaymentTable({ records }: { records: RecordType[] }) {
@@ -25,9 +28,38 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  // ✅ Filtering
+  const getRefundDisplayStatus = (r: RecordType) => {
+    if (r.type !== "REFUND") return r.status;
+
+    const refundAmount = Number(r.amount || 0);
+    const parentAmount = Number(r.parent_amount || r.parentAmount || 0);
+
+    if (parentAmount > 0 && refundAmount === parentAmount) {
+      return "FULL REFUND";
+    }
+
+    if (parentAmount > 0 && refundAmount > 0 && refundAmount < parentAmount) {
+      return "PARTIAL REFUND";
+    }
+
+    return "REFUNDED";
+  };
+
+  const getStatusBadgeClass = (displayStatus: string) => {
+    if (displayStatus === "CAPTURED") return "bg-green-100 text-green-700";
+    if (displayStatus === "FAILED") return "bg-red-100 text-red-700";
+    if (displayStatus === "FULL REFUND") return "bg-orange-100 text-orange-700";
+    if (displayStatus === "PARTIAL REFUND") return "bg-yellow-100 text-yellow-700";
+    if (displayStatus === "REFUNDED") return "bg-orange-100 text-orange-700";
+    if (displayStatus === "SETTLEMENT") return "bg-teal-100 text-teal-700";
+
+    return "bg-gray-100 text-gray-700";
+  };
+
   const filtered = useMemo(() => {
     return records.filter((r) => {
+      const displayStatus = getRefundDisplayStatus(r);
+
       const matchesSearch =
         r.id.toLowerCase().includes(search.toLowerCase()) ||
         r.customer.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -35,18 +67,19 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
         (r.customer.contact || "").includes(search);
 
       const matchesStatus =
-        statusFilter === "ALL" || r.status === statusFilter;
+        statusFilter === "ALL" ||
+        r.status === statusFilter ||
+        displayStatus === statusFilter ||
+        (statusFilter === "REFUNDED" && r.type === "REFUND");
 
       return matchesSearch && matchesStatus;
     });
   }, [records, search, statusFilter]);
 
-  // ✅ Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const startIndex = (currentPage - 1) * rowsPerPage;
   const paginated = filtered.slice(startIndex, startIndex + rowsPerPage);
 
-  // ✅ Export
   const handleExport = () => {
     const exportData = filtered.map((r) => ({
       ID: r.id,
@@ -56,10 +89,11 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
       Contact: r.customer.contact || "-",
       Amount: r.amount,
       Method: r.method,
-      Status: r.status,
+      Status: getRefundDisplayStatus(r),
       Date: r.date,
       UTR: r.utr || "-",
     }));
+
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Records");
@@ -68,7 +102,6 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div className="flex gap-2 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
@@ -85,7 +118,6 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
             />
           </div>
 
-          {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => {
@@ -98,6 +130,8 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
             <option value="CAPTURED">Captured</option>
             <option value="FAILED">Failed</option>
             <option value="REFUNDED">Refunded</option>
+            <option value="FULL REFUND">Full Refund</option>
+            <option value="PARTIAL REFUND">Partial Refund</option>
             <option value="SETTLEMENT">Settlements</option>
           </select>
         </div>
@@ -105,7 +139,6 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
         <Button onClick={handleExport}>Export</Button>
       </div>
 
-      {/* Desktop Table */}
       <div className="hidden md:block overflow-x-auto border rounded-md bg-white">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -125,118 +158,109 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
                 <th className="px-3 py-2">UTR</th>
               </tr>
             </thead>
+
             <tbody>
-              {paginated.map((r) => (
-                <tr key={r.id} className="border-t hover:bg-gray-50">
-                  <td className="px-3 py-2">{r.id}</td>
-                  <td className="px-3 py-2">
-                    {r.type === "PAYMENT" || r.type === "REFUND" ? (
-                      <>
-                        <div className="font-medium">{r.customer.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {r.customer.email}
-                        </div>
-                        {r.customer.contact && (
+              {paginated.map((r) => {
+                const displayStatus = getRefundDisplayStatus(r);
+
+                return (
+                  <tr key={r.id} className="border-t hover:bg-gray-50">
+                    <td className="px-3 py-2">{r.id}</td>
+
+                    <td className="px-3 py-2">
+                      {r.type === "PAYMENT" || r.type === "REFUND" ? (
+                        <>
+                          <div className="font-medium">{r.customer.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            {r.customer.contact}
+                            {r.customer.email}
                           </div>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-semibold">₹{r.amount}</td>
-                  <td className="px-3 py-2">{r.method}</td>
-                  <td className="px-3 py-2">
-                    <Badge
-                      className={
-                        r.status === "CAPTURED"
-                          ? "bg-green-100 text-green-700"
-                          : r.status === "FAILED"
-                          ? "bg-red-100 text-red-700"
-                          : r.status === "REFUNDED"
-                          ? "bg-orange-100 text-orange-700"
-                          : r.status === "SETTLEMENT"
-                          ? "bg-teal-100 text-teal-700"
-                          : "bg-gray-100 text-gray-700"
-                      }
-                    >
-                      {r.status}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2">{r.date}</td>
-                  <td className="px-3 py-2">
-                    {r.type === "SETTLEMENT" ? r.utr : "—"}
-                  </td>
-                </tr>
-              ))}
+                          {r.customer.contact && (
+                            <div className="text-xs text-muted-foreground">
+                              {r.customer.contact}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+
+                    <td className="px-3 py-2 font-semibold">₹{r.amount}</td>
+                    <td className="px-3 py-2">{r.method}</td>
+
+                    <td className="px-3 py-2">
+                      <Badge className={getStatusBadgeClass(displayStatus)}>
+                        {displayStatus}
+                      </Badge>
+                    </td>
+
+                    <td className="px-3 py-2">{r.date}</td>
+
+                    <td className="px-3 py-2">
+                      {r.type === "SETTLEMENT" ? r.utr : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* Mobile Cards */}
       <div className="grid gap-3 md:hidden">
         {paginated.length === 0 ? (
           <p className="text-center text-muted-foreground">No records found.</p>
         ) : (
-          paginated.map((r) => (
-            <div key={r.id} className="border rounded-lg p-4 bg-white shadow-sm">
-              <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-sm">{r.id}</h3>
-                <Badge
-                  className={
-                    r.status === "CAPTURED"
-                      ? "bg-green-100 text-green-700"
-                      : r.status === "FAILED"
-                      ? "bg-red-100 text-red-700"
-                      : r.status === "REFUNDED"
-                      ? "bg-orange-100 text-orange-700"
-                      : r.status === "SETTLEMENT"
-                      ? "bg-teal-100 text-teal-700"
-                      : "bg-gray-100 text-gray-700"
-                  }
-                >
-                  {r.status}
-                </Badge>
-              </div>
+          paginated.map((r) => {
+            const displayStatus = getRefundDisplayStatus(r);
 
-              {(r.type === "PAYMENT" || r.type === "REFUND") && (
-                <div className="mt-2 text-sm">
-                  <p className="font-medium">{r.customer.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {r.customer.email}
-                  </p>
-                  {r.customer.contact && (
-                    <p className="text-xs text-muted-foreground">
-                      {r.customer.contact}
-                    </p>
-                  )}
+            return (
+              <div key={r.id} className="border rounded-lg p-4 bg-white shadow-sm">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-semibold text-sm">{r.id}</h3>
+
+                  <Badge className={getStatusBadgeClass(displayStatus)}>
+                    {displayStatus}
+                  </Badge>
                 </div>
-              )}
 
-              {r.type === "SETTLEMENT" && (
-                <p className="mt-2 text-sm">UTR: {r.utr}</p>
-              )}
+                {(r.type === "PAYMENT" || r.type === "REFUND") && (
+                  <div className="mt-2 text-sm">
+                    <p className="font-medium">{r.customer.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {r.customer.email}
+                    </p>
+                    {r.customer.contact && (
+                      <p className="text-xs text-muted-foreground">
+                        {r.customer.contact}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-              <div className="mt-2 text-sm flex justify-between">
-                <span>₹{r.amount}</span>
-                <span>{r.method}</span>
+                {r.type === "SETTLEMENT" && (
+                  <p className="mt-2 text-sm">UTR: {r.utr}</p>
+                )}
+
+                <div className="mt-2 text-sm flex justify-between">
+                  <span>₹{r.amount}</span>
+                  <span>{r.method}</span>
+                </div>
+
+                <p className="text-xs text-muted-foreground mt-1">{r.date}</p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">{r.date}</p>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* Pagination Controls */}
       {filtered.length > 0 && (
         <div className="flex justify-between items-center text-sm text-muted-foreground">
           <p>
             Page {currentPage} of {totalPages} — Showing {paginated.length} of{" "}
             {filtered.length} records
           </p>
+
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -246,6 +270,7 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
             >
               Previous
             </Button>
+
             <Button
               size="sm"
               variant="outline"

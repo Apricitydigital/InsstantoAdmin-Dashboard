@@ -66,6 +66,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     const completedBookings = realBookings.filter(
         booking => booking.status === "Service_Completed"
     )
+<<<<<<< Updated upstream
     const completed = completedBookings.length
     const cancelled = realBookings.filter(booking => booking.status === "Cancelled").length
     const cancelledByCustomer = cancelled
@@ -75,6 +76,20 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
             + (booking.walletAmountUsed || 0)
             + (booking.discount_amount || 0),
         0
+=======
+    const completedQuery = qWithFilters(
+        where("provider_id", "in", customerRefs),
+        where("status", "==", "Service_Completed")
+    )
+    const cancelledQuery = qWithFilters(
+        where("provider_id", "in", customerRefs),
+        where("status", "==", "Cancelled")
+    )
+    const cancelledByCustomerQuery = qWithFilters(
+        where("provider_id", "in", customerRefs),
+        where("status", "==", "Cancelled")
+      
+>>>>>>> Stashed changes
     )
 
     // Apply the selected range to ratings as well. Older review records may use
