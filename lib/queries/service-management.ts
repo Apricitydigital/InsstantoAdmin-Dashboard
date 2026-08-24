@@ -1,5 +1,6 @@
 import {
   collection,
+  addDoc,
   deleteField,
   doc,
   DocumentData,
@@ -7,7 +8,6 @@ import {
   getDoc,
   getDocs,
   runTransaction,
-  setDoc,
   updateDoc,
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
@@ -285,21 +285,14 @@ export async function fetchCoverage(): Promise<CoverageCity[]> {
   )
 }
 
-function slug(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
-}
-
 export async function saveCity(cityName: string) {
-  const id = slug(cityName)
-  if (!id) throw new Error("Enter a valid city name")
-  const cityRef = doc(db(), "service_coverage", id)
-  if ((await getDoc(cityRef)).exists()) throw new Error("A city with this document ID already exists")
-  await setDoc(cityRef, { cityName: cityName.trim(), Active: true })
+  if (!cityName.trim()) throw new Error("Enter a valid city name")
+  await addDoc(collection(db(), "service_coverage"), { cityName: cityName.trim(), Active: true })
 }
 
 export async function assignCategory(cityId: string, category: CatalogueCategory) {
   if (!category.path) throw new Error("This category has no source document reference")
-  await setDoc(doc(db(), "service_coverage", cityId, "Categories", category.id), {
+  await addDoc(collection(db(), "service_coverage", cityId, "Categories"), {
     categoryId: doc(db(), category.path),
     categoryName: category.name,
     Active: true,
@@ -307,11 +300,12 @@ export async function assignCategory(cityId: string, category: CatalogueCategory
 }
 
 export async function saveHub(cityId: string, categoryId: string, hubName: string) {
-  const id = slug(hubName)
-  if (!id) throw new Error("Enter a valid hub name")
-  const hubRef = doc(db(), "service_coverage", cityId, "Categories", categoryId, "service_hubs", id)
-  if ((await getDoc(hubRef)).exists()) throw new Error("A hub with this document ID already exists")
-  await setDoc(hubRef, { hubName: hubName.trim(), Active: true, pincodes: [] })
+  if (!hubName.trim()) throw new Error("Enter a valid hub name")
+  await addDoc(collection(db(), "service_coverage", cityId, "Categories", categoryId, "service_hubs"), {
+    hubName: hubName.trim(),
+    Active: true,
+    pincodes: [],
+  })
 }
 
 export async function setActive(path: string, Active: boolean) {

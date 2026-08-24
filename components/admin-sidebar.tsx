@@ -25,23 +25,25 @@ import {
   Wrench,
   User,
   LogOut,
+  ShieldCheck,
 } from "lucide-react"
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Customer Management", href: "/customers", icon: Users },
-  { name: "Partner Management", href: "/partners", icon: UserCheck },
-  { name: "Booking & Scheduling", href: "/bookings", icon: Calendar },
-  { name: "Payment Management", href: "/payments", icon: CreditCard },
-  { name: "Coupons & Offers", href: "/coupons", icon: Ticket },
-  { name: "Services & Coverage", href: "/services", icon: Wrench },
-  { name: "Complaints & Support", href: "/support", icon: MessageSquare },
-  { name: "AI Data Assistant", href: "/chatbot", icon: MessageSquare },
-  { name: "Store", href: "/store", icon: Store },
+  { name: "Dashboard", href: "/", icon: LayoutDashboard, permissions: ["dashboard:view"] },
+  { name: "Customer Management", href: "/customers", icon: Users, permissions: ["customers:view", "customers:view_limited"] },
+  { name: "Partner Management", href: "/partners", icon: UserCheck, permissions: ["partners:view", "partners:manage"] },
+  { name: "Booking & Scheduling", href: "/bookings", icon: Calendar, permissions: ["bookings:view"] },
+  { name: "Payment Management", href: "/payments", icon: CreditCard, permissions: ["payments:view"] },
+  { name: "Coupons & Offers", href: "/coupons", icon: Ticket, permissions: ["coupons:view"] },
+  { name: "Services & Coverage", href: "/services", icon: Wrench, permissions: ["services:view"] },
+  { name: "Complaints & Support", href: "/support", icon: MessageSquare, permissions: ["complaints:view"] },
+  { name: "AI Data Assistant", href: "/chatbot", icon: MessageSquare, permissions: ["chatbot:view"] },
+  { name: "Store", href: "/store", icon: Store, permissions: ["store:view"] },
   {
     name: "Analytics",
     href: "/analytics",
     icon: BarChart3,
+    permissions: ["analytics:view"],
     children: [
       { name: "Revenue", href: "/analytics/revenue" },
       { name: "Operations", href: "/analytics/operations" },
@@ -49,6 +51,7 @@ const navigation = [
       { name: "Marketing", href: "/analytics/marketing" },
     ],
   },
+  { name: "Role Management", href: "/roles", icon: ShieldCheck, superadminOnly: true },
 ]
 
 interface SidebarProps {
@@ -57,14 +60,15 @@ interface SidebarProps {
 
 export function AdminSidebar({ className }: SidebarProps) {
   const pathname = usePathname()
-  const { user, logout } = useAuth()
+  const { user, logout, hasPermission } = useAuth()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [isHovered, setIsHovered] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const visibleNavigation = user?.role === "store_manager"
-    ? navigation.filter((item) => item.href === "/store")
-    : navigation
-  const homeHref = user?.role === "store_manager" ? "/store" : "/"
+  const visibleNavigation = navigation.filter((item) => {
+    if (item.superadminOnly) return user?.role === "superadmin"
+    return user?.role === "superadmin" || item.permissions?.some((permission) => hasPermission(permission))
+  })
+  const homeHref = visibleNavigation[0]?.href || "/"
 
   const handleLogout = async () => {
     await logout()
@@ -81,7 +85,7 @@ export function AdminSidebar({ className }: SidebarProps) {
             <span className="min-w-0 flex-1 text-left">
               <span className="block truncate text-sm font-medium">{user?.name || "Account"}</span>
               <span className="block truncate text-xs font-normal text-muted-foreground">{user?.email}</span>
-              <span className="block truncate text-xs capitalize text-muted-foreground">{user?.role?.replaceAll("_", " ")}</span>
+              <span className="block truncate text-xs capitalize text-muted-foreground">{user?.roleName || user?.role?.replaceAll("_", " ")}</span>
             </span>
           )}
       </div>

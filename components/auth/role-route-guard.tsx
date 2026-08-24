@@ -11,16 +11,31 @@ function LoadingScreen() {
 }
 
 export function RoleRouteGuard({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, logout } = useAuth()
+  const { user, isLoading, logout, hasPermission } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
   const isLogin = pathname === "/login"
-  const isStoreRoute = pathname === "/store" || pathname.startsWith("/store/")
-  const canAccess = Boolean(user && (
-    user.role === "superadmin" ||
-    user.role === "admin" ||
-    (user.role === "store_manager" && isStoreRoute)
+  const routePermissions: Array<[string, string[]]> = [
+    ["/customers", ["customers:view", "customers:view_limited"]],
+    ["/partners", ["partners:view", "partners:manage"]],
+    ["/bookings", ["bookings:view"]],
+    ["/payments", ["payments:view"]],
+    ["/coupons", ["coupons:view"]],
+    ["/services", ["services:view"]],
+    ["/support", ["complaints:view"]],
+    ["/chatbot", ["chatbot:view"]],
+    ["/store", ["store:view"]],
+    ["/analytics", ["analytics:view"]],
+    ["/reports", ["reports:view"]],
+    ["/settings", ["settings:view"]],
+  ]
+  const required = routePermissions.find(([route]) => pathname === route || pathname.startsWith(`${route}/`))?.[1]
+  const hasDashboardRole = Boolean(user && user.role !== "unauthorized")
+  const canAccess = Boolean(hasDashboardRole && (
+    user?.role === "superadmin" ||
+    (pathname === "/roles" ? false : pathname === "/" ? hasPermission("dashboard:view") : !required || required.some(hasPermission))
   ))
+  const firstAllowedRoute = routePermissions.find(([, permissions]) => permissions.some(hasPermission))?.[0] || "/"
 
   useEffect(() => {
     if (isLoading) return
@@ -29,11 +44,10 @@ export function RoleRouteGuard({ children }: { children: React.ReactNode }) {
       return
     }
     if (user && isLogin) {
-      router.replace(user.role === "store_manager" ? "/store" : "/")
+      router.replace(user.role === "superadmin" || hasPermission("dashboard:view") ? "/" : firstAllowedRoute)
       return
     }
-    if (user?.role === "store_manager" && !isStoreRoute) router.replace("/store")
-  }, [isLoading, isLogin, isStoreRoute, router, user])
+  }, [firstAllowedRoute, hasPermission, isLoading, isLogin, router, user])
 
   if (isLoading) return <LoadingScreen />
   if (isLogin) return user ? <LoadingScreen /> : <>{children}</>

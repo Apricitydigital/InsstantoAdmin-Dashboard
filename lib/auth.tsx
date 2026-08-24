@@ -4,12 +4,14 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase"
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
+import { DEFAULT_ROLE_PERMISSIONS, normalizePermissions } from "@/lib/permissions"
 
 export interface User {
   id: string
   email: string
   name?: string
   role: string
+  roleName?: string
   permissions: string[]
 }
 
@@ -19,47 +21,6 @@ export interface AuthContextType {
   logout: () => Promise<void>
   isLoading: boolean
   hasPermission: (permission: string) => boolean
-}
-
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  superadmin: [
-    "admin:users:view",
-    "admin:users:write",
-    "admin:roles:view",
-    "admin:roles:write",
-    "bookings:view",
-    "bookings:write",
-    "payments:view",
-    "payments:write",
-    "store:view",
-    "store:write",
-    "coupons:view",
-    "coupons:write",
-    "customers:view",
-    "customers:write",
-    "complaints:view",
-    "complaints:write",
-    "analytics:view",
-    "partners:manage",
-    "services:view",
-    "services:write",
-  ],
-  admin: [
-    "bookings:view",
-    "payments:view",
-    "store:view",
-    "coupons:view",
-    "customers:view",
-    "customers:view_limited",
-    "complaints:view",
-    "analytics:view",
-    "partners:view",
-    "services:view",
-    "reports:view",
-    "chatbot:view",
-    "settings:view",
-  ],
-  store_manager: ["store:view"],
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -95,20 +56,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const claimedRole = typeof tokenResult.claims.roleId === "string" ? tokenResult.claims.roleId : ""
         const profileRole = typeof profile.roleId === "string" ? profile.roleId : ""
-        const roleId = (claimedRole || profileRole || "unauthorized").trim().toLowerCase()
+        // The profile is the source of truth so assignments made in Role
+        // Management take effect without waiting for custom claims to refresh.
+        const rawRoleId = (profileRole || claimedRole || "unauthorized").trim()
+        const normalizedRoleId = rawRoleId.toLowerCase()
+        const roleId = normalizedRoleId in DEFAULT_ROLE_PERMISSIONS ? normalizedRoleId : rawRoleId
         const displayName =
           (typeof profile.name === "string" && profile.name) ||
           fbUser.displayName ||
           fbUser.email?.split("@")[0] ||
           "User"
 
-        const permissions = DEFAULT_ROLE_PERMISSIONS[roleId] || []
+        let permissions = DEFAULT_ROLE_PERMISSIONS[roleId] || []
+        let roleName = roleId.replaceAll("_", " ")
+        try {
+          const roleSnap = await getDoc(doc(db, "roles", roleId))
+          if (roleSnap.exists()) {
+            const roleData = roleSnap.data()
+            if (Array.isArray(roleData.permissions)) {
+              permissions = roleData.permissions.filter((value): value is string => typeof value === "string")
+            }
+            if (typeof roleData.name === "string" && roleData.name.trim()) roleName = roleData.name.trim()
+          }
+        } catch (error) {
+          console.warn("[auth] could not read role permissions", error)
+        }
+        // Built-in roles retain their baseline guarantees even if an older
+        // role document is missing a newly introduced permission.
+        if (DEFAULT_ROLE_PERMISSIONS[roleId]) {
+          permissions = [...DEFAULT_ROLE_PERMISSIONS[roleId], ...permissions]
+        }
+        permissions = normalizePermissions(permissions)
 
         setUser({
           id: fbUser.uid,
           email: fbUser.email || "",
           name: displayName,
           role: roleId,
+          roleName,
           permissions,
         })
       } catch (e) {
@@ -145,8 +130,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPermission = (permission: string): boolean => {
     if (!user) return false
     if (user.role === "superadmin") return true
-    if (user.role === "admin") return DEFAULT_ROLE_PERMISSIONS.admin.includes(permission)
-    if (user.role === "store_manager") return permission === "store:view"
     return user.permissions.includes(permission)
   }
 

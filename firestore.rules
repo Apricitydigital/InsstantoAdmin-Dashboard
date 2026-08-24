@@ -33,7 +33,13 @@ service cloud.firestore {
     }
 
     function hasRole(role) {
-      return tokenHasRole(role) || userHasRole(role) || customerHasRole(role);
+      // Prefer the Firestore profile when it exists so role assignments made
+      // by a super admin are not overridden by an older token claim.
+      return userHasRole(role)
+        || (signedIn()
+          && !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && tokenHasRole(role))
+        || customerHasRole(role);
     }
 
     function isSuperAdmin() {
@@ -55,19 +61,32 @@ service cloud.firestore {
         && roleData().permissions.hasAny([permission]);
     }
 
+    function canRead(permission) {
+      return canViewDashboard() || hasPermission(permission);
+    }
+
+    function canResolveComplaint() {
+      return hasRole('admin') || hasPermission('complaints:write');
+    }
+
+    function isResolutionOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['complaint_status', 'timeslot', 'complaint_history']);
+    }
+
     // Customers and admins must be able to read coverage. Only verified admin
     // roles (or a role explicitly granted services:write) may change it.
     match /service_coverage/{cityId} {
       allow read: if signedIn();
-      allow write: if isSuperAdmin();
+      allow write: if isSuperAdmin() || hasPermission('services:write');
 
       match /Categories/{categoryId} {
         allow read: if signedIn();
-        allow write: if isSuperAdmin();
+        allow write: if isSuperAdmin() || hasPermission('services:write');
 
         match /service_hubs/{hubId} {
           allow read: if signedIn();
-          allow write: if isSuperAdmin();
+          allow write: if isSuperAdmin() || hasPermission('services:write');
         }
       }
     }
@@ -83,52 +102,73 @@ service cloud.firestore {
     match /service_categories/{docId} { allow read: if signedIn(); }
 
     match /bookings/{docId} {
-      allow read: if canViewDashboard();
-      allow write: if isSuperAdmin();
+      allow read: if canRead('bookings:view');
+      allow write: if isSuperAdmin() || hasPermission('bookings:write');
     }
     match /payments/{docId} {
-      allow read: if canViewDashboard();
-      allow write: if isSuperAdmin();
+      allow read: if canRead('payments:view');
+      allow write: if isSuperAdmin() || hasPermission('payments:write');
     }
     match /store/{docId} {
-      allow read: if canViewDashboard() || isStoreManager();
-      allow write: if isSuperAdmin();
+      allow read: if canRead('store:view') || isStoreManager();
+      allow write: if isSuperAdmin() || hasPermission('store:write');
     }
     match /coupons/{docId} {
-      allow read: if canViewDashboard();
-      allow write: if isSuperAdmin();
+      allow read: if canRead('coupons:view');
+      allow write: if isSuperAdmin() || hasPermission('coupons:write');
+    }
+    match /coupon/{docId} {
+      allow read: if canRead('coupons:view');
+      allow write: if isSuperAdmin() || hasPermission('coupons:write');
     }
     match /customers/{docId} {
-      allow read: if canViewDashboard();
-      allow write: if isSuperAdmin();
+      allow read: if canRead('customers:view') || hasPermission('customers:view_limited');
+      allow write: if isSuperAdmin() || hasPermission('customers:write');
+    }
+    match /customer/{docId} {
+      allow read: if canRead('customers:view')
+        || hasPermission('customers:view_limited')
+        || hasPermission('partners:view')
+        || hasPermission('partners:manage');
+      allow write: if isSuperAdmin()
+        || hasPermission('customers:write')
+        || hasPermission('partners:manage');
     }
     match /complaints/{docId} {
-      allow read: if canViewDashboard();
-      allow write: if isSuperAdmin();
+      allow read: if canRead('complaints:view');
+      allow write: if isSuperAdmin() || (canResolveComplaint() && isResolutionOnly());
+    }
+    match /customer_complain/{docId} {
+      allow read: if canRead('complaints:view');
+      allow update: if isSuperAdmin() || (canResolveComplaint() && isResolutionOnly());
+      allow create, delete: if isSuperAdmin();
     }
     match /roles/{docId} {
-      allow read: if canViewDashboard();
+      allow read: if isSuperAdmin()
+        || (signedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && userData().roleId == docId);
       allow write: if isSuperAdmin();
     }
     match /users/{docId} {
-      allow read: if signedIn() && (request.auth.uid == docId || canViewDashboard());
+      allow read: if signedIn() && (request.auth.uid == docId || isSuperAdmin());
       allow write: if isSuperAdmin();
     }
 
     match /store_items/{docId} {
-      allow read: if canViewDashboard() || isStoreManager();
-      allow write: if isSuperAdmin();
+      allow read: if canRead('store:view') || isStoreManager();
+      allow write: if isSuperAdmin() || hasPermission('store:write');
     }
 
     match /chemical_purchase_record/{docId} {
-      allow read: if canViewDashboard() || isStoreManager();
-      allow write: if isSuperAdmin();
+      allow read: if canRead('store:view') || isStoreManager();
+      allow write: if isSuperAdmin() || hasPermission('store:write');
     }
 
     // Admin and superadmin can read every dashboard collection. Only the
     // superadmin role receives dashboard-wide mutation rights.
     match /{document=**} {
-      allow read: if canViewDashboard();
+      allow read: if canViewDashboard() || hasPermission('analytics:view');
       allow write: if isSuperAdmin();
     }
   }
