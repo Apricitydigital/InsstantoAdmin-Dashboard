@@ -328,8 +328,8 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
 
   // ---------- Render ----------
   return (
-    <Card className="overflow-hidden">
-      <CardHeader>
+    <Card className="overflow-hidden border-slate-200 shadow-sm">
+      <CardHeader className="gap-4 border-b border-slate-100 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
         <CardTitle className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-primary" />
           Cart Services ({filteredCart.length})
@@ -339,22 +339,22 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
         </CardDescription>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="p-3 sm:p-5">
         {/* Filters Row */}
-        <div className="flex flex-col lg:flex-row justify-between items-center gap-3 mb-4">
+        <div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           {/* Search */}
           <div className="relative w-full lg:w-1/2">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               placeholder="Search service, customer, status..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8"
+              className="bg-white pl-9"
             />
           </div>
 
           {/* Status Filter + Export */}
-          <div className="flex gap-2 w-full lg:w-auto justify-end">
+          <div className="grid w-full gap-2 sm:grid-cols-[auto_1fr] lg:w-auto lg:grid-cols-[auto_auto] lg:justify-end">
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
 
@@ -386,10 +386,10 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto rounded-md border shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
           <Table exportable={false} className="min-w-[1100px] w-full text-sm">
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-slate-50/80">
                 <TableHead>Cart ID</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Service</TableHead>
@@ -487,7 +487,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-2">
+        <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-muted-foreground">
             Page {currentPage} of {totalPages || 1}
             {filteredCart.length > 0 && (

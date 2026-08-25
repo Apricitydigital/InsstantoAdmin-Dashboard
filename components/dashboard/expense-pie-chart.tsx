@@ -183,9 +183,9 @@ export function ExpensePieChart({ className = "" }: { className?: string }) {
     /* ---------------- UI ---------------- */
     return (
         <Card
-            className={`border-l-4 border-gray-300 bg-white shadow-sm transition-transform hover:scale-[1.02] hover:shadow-md ${className}`}
+            className={`overflow-hidden border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md ${className}`}
         >
-            <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+            <CardHeader className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-4 sm:p-5">
                 <div>
                     <CardTitle className="text-base font-semibold text-gray-700 flex items-center gap-1">
                         💹 Expense Breakdown
@@ -206,7 +206,7 @@ export function ExpensePieChart({ className = "" }: { className?: string }) {
                 </select>
             </CardHeader>
 
-            <CardContent className="flex flex-col items-center justify-center w-full space-y-4">
+            <CardContent className="flex w-full flex-col items-center justify-center space-y-4 p-3 sm:p-5">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center gap-2 text-gray-500 h-[300px]">
                         <Loader2 className="h-5 w-5 animate-spin" />

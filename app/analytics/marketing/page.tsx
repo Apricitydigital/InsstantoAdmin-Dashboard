@@ -4,25 +4,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Target, Users, TrendingUp, Zap } from "lucide-react"
-import { AdminSidebar } from "@/components/admin-sidebar"
 import { AdminHeader } from "@/components/admin-header"
 
 export default function MarketingAnalyticsPage() {
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
-      <AdminSidebar />
       <div className="flex flex-col sm:gap-4 sm:py-4">
         <AdminHeader title="Marketing Analytics" />
         <main className="flex-1 space-y-6 p-4 md:p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card className="bg-gradient-to-br from-pink-50 to-rose-50 border-pink-200">
+            <Card className="border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <Target className="w-8 h-8 text-pink-600" />
+                  <Target className="h-8 w-8 text-indigo-600" />
                   <Badge variant="secondary">+15%</Badge>
                 </div>
-                <CardTitle className="text-2xl font-bold text-pink-900">₹450</CardTitle>
-                <CardDescription className="text-pink-700">Customer Acquisition Cost</CardDescription>
+                <CardTitle className="text-2xl font-bold text-indigo-950">₹450</CardTitle>
+                <CardDescription className="text-indigo-700">Customer Acquisition Cost</CardDescription>
               </CardHeader>
             </Card>
 

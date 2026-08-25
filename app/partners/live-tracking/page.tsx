@@ -13,14 +13,12 @@
 // }
 
 import { PartnerLiveLocation } from "@/components/partners/partner-live-location"
-import { AdminSidebar } from "@/components/admin-sidebar"
 
 export default function PartnerLiveTrackingPage() {
   return (
     <div className="flex h-screen overflow-hidden bg-[#F7F9FC]">
 
       {/* EXISTING ADMIN SIDEBAR */}
-      <AdminSidebar />
 
       {/* MAIN AREA */}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -38,7 +36,7 @@ export default function PartnerLiveTrackingPage() {
             </p>
           </div>
 
-          <div className="rounded-full bg-cyan-50 px-3 py-1.5 text-[10px] font-semibold text-cyan-700">
+          <div className="rounded-full bg-indigo-50 px-3 py-1.5 text-[10px] font-semibold text-indigo-700">
             Live Operations
           </div>
 

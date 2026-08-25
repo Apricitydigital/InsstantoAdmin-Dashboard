@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { AuthProvider } from "@/lib/auth"
+import { AdminShell } from "@/components/admin-shell"
 import { RoleRouteGuard } from "@/components/auth/role-route-guard"
 import "./globals.css"
 
@@ -21,7 +22,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AuthProvider>
-          <RoleRouteGuard>{children}</RoleRouteGuard>
+          <RoleRouteGuard><AdminShell>{children}</AdminShell></RoleRouteGuard>
         </AuthProvider>
       </body>
     </html>

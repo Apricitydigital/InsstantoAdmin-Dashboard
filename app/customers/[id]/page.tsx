@@ -1,82 +1,33 @@
-// app/admin/customers/[id]/page.tsx
 "use client"
 
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
+import dynamic from "next/dynamic"
 import { useParams, useRouter } from "next/navigation"
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  Timestamp,
-} from "firebase/firestore"
-import { getFirestoreDb } from "@/lib/firebase"
+import { collection, doc, getDoc, getDocs, query, Timestamp, where } from "firebase/firestore"
+import { ArrowLeft, CalendarDays, CheckCircle2, CreditCard, History, Mail, MapPin, Phone, Star, TrendingUp, UserPlus, Users, Wallet, XCircle } from "lucide-react"
 
-import { ProtectedRoute } from "@/components/auth/protected-route"
-import { AdminSidebar } from "@/components/admin-sidebar"
 import { AdminHeader } from "@/components/admin-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { ProtectedRoute } from "@/components/auth/protected-route"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  ArrowLeft, 
-  Mail, 
-  Phone, 
-  Calendar, 
-  Wallet, 
-  Star,
-  CheckCircle,
-  TrendingUp,
-  Loader2,
-  XCircle,
-  UserPlus,
-  History,
-  CreditCard,
-  Users
-} from "lucide-react"
+import { getFirestoreDb } from "@/lib/firebase"
+import { cacheCustomerNavigationPreview, readCustomerNavigationPreview } from "@/lib/customer-navigation-cache"
 
-// Import tab components
-import { CustomerBookingsTab } from "./sections/customer-bookings"
-import { CustomerCreditsTab } from "./sections/customer-credits"
-import { CustomerReferralsTab } from "./sections/customer-referrals"
+const TabLoading = () => <div className="h-56 animate-pulse rounded-xl bg-slate-100" />
+const CustomerBookingsTab = dynamic(() => import("./sections/customer-bookings").then((module) => module.CustomerBookingsTab), { loading: TabLoading })
+const CustomerCreditsTab = dynamic(() => import("./sections/customer-credits").then((module) => module.CustomerCreditsTab), { loading: TabLoading })
+const CustomerReferralsTab = dynamic(() => import("./sections/customer-referrals").then((module) => module.CustomerReferralsTab), { loading: TabLoading })
 
 type CustomerDoc = {
-  id: string
-  uid?: string
-  email?: string
-  display_name?: string
-  customer_name?: string
-  phone_number?: string
-  contact_no?: number
-  userType?: any
-  created_time?: Timestamp
-  edited_time?: Timestamp
-  location?: any
-  photo_url?: string
-  address?: any
-  bio?: string
-  referralBy?: string
-  referralCode?: string
-  Subscription?: string
+  id: string; uid?: string; email?: string; display_name?: string; customer_name?: string
+  phone_number?: string; contact_no?: number; created_time?: Timestamp; photo_url?: string
+  address?: any; bio?: string; referralCode?: string; Subscription?: string
 }
-
-type BookingDoc = {
-  id: string
-  customer_id?: any
-  status?: string
-  date?: Timestamp
-  amount_paid?: number
-}
-
-type WalletDoc = {
-  id: string
-  credit_balance?: number
-}
+type BookingDoc = { id: string; status?: string; amount_paid?: number }
+type WalletDoc = { id: string; credit_balance?: number }
 
 export default function CustomerDetailsPage() {
   const params = useParams()
@@ -92,360 +43,195 @@ export default function CustomerDetailsPage() {
   const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState("bookings")
 
-  // Fetch customer details
   useEffect(() => {
-    const fetchCustomer = async () => {
-      if (!customerId) return
-      
-      try {
-        setLoading(true)
-        const customerDoc = await getDoc(doc(db, "customer", customerId))
-        
-        if (customerDoc.exists()) {
-          setCustomer({ id: customerDoc.id, ...customerDoc.data() } as CustomerDoc)
-        } else {
-          setError("Customer not found")
-        }
-      } catch (err: any) {
-        setError(err.message || "Failed to load customer details")
-      } finally {
-        setLoading(false)
-      }
-    }
+    if (!customerId) return
+    let active = true
+    const customerRef = doc(db, "customer", customerId)
+    const cachedPreview = readCustomerNavigationPreview(customerId)
 
-    fetchCustomer()
+    if (cachedPreview) {
+      setCustomer({
+        id: cachedPreview.id,
+        uid: cachedPreview.uid,
+        display_name: cachedPreview.displayName,
+        email: cachedPreview.email,
+        phone_number: cachedPreview.phone === "—" ? undefined : cachedPreview.phone,
+        photo_url: cachedPreview.photoUrl,
+        Subscription: cachedPreview.subscription,
+        referralCode: cachedPreview.referralCode,
+        created_time: cachedPreview.createdTimeMs ? Timestamp.fromMillis(cachedPreview.createdTimeMs) : undefined,
+      })
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
+    setWalletLoading(true)
+    setError("")
+
+    getDoc(customerRef)
+      .then((snapshot) => {
+        if (!active) return
+        if (!snapshot.exists()) {
+          setError("Customer not found")
+          return
+        }
+        const freshCustomer = { id: snapshot.id, ...snapshot.data() } as CustomerDoc
+        setCustomer(freshCustomer)
+        cacheCustomerNavigationPreview({
+          id: freshCustomer.id,
+          uid: freshCustomer.uid,
+          displayName: freshCustomer.display_name || freshCustomer.customer_name,
+          email: freshCustomer.email,
+          phone: freshCustomer.phone_number || (freshCustomer.contact_no ? String(freshCustomer.contact_no) : undefined),
+          photoUrl: freshCustomer.photo_url,
+          subscription: freshCustomer.Subscription,
+          referralCode: freshCustomer.referralCode,
+          createdTimeMs: freshCustomer.created_time?.toMillis?.(),
+        })
+      })
+      .catch((reason) => {
+        if (!active) return
+        if (!cachedPreview) setError(reason?.message || "Failed to load customer details")
+      })
+      .finally(() => active && setLoading(false))
+
+    getDocs(query(collection(db, "bookings"), where("customer_id", "==", customerRef)))
+      .then((snapshot) => {
+        if (active) setBookings(snapshot.docs.map((booking) => ({ id: booking.id, ...booking.data() })) as BookingDoc[])
+      })
+      .catch((reason) => console.error("Failed to load booking statistics:", reason))
+
+    ;(async () => {
+      try {
+        const walletQuery = query(collection(db, "partner_overall_credits"), where("service_partner_id", "==", customerRef))
+        const snapshot = await getDocs(walletQuery)
+        if (!active) return
+        if (!snapshot.empty) {
+          const wallet = snapshot.docs[0]
+          setWalletInfo({ id: wallet.id, ...wallet.data() } as WalletDoc)
+        } else {
+          const directWallet = await getDoc(doc(db, "partner_overall_credits", customerId))
+          if (active && directWallet.exists()) setWalletInfo({ id: directWallet.id, ...directWallet.data() } as WalletDoc)
+        }
+      } catch (reason) {
+        console.error("Failed to load wallet statistics:", reason)
+      } finally {
+        if (active) setWalletLoading(false)
+      }
+    })()
+
+    return () => { active = false }
   }, [customerId, db])
 
-  // Fetch bookings for statistics
-  useEffect(() => {
-    const fetchBookings = async () => {
-      if (!customer?.id) return
+  const formatDate = (timestamp?: Timestamp) => timestamp?.toDate ? timestamp.toDate().toLocaleString() : "—"
+  const formatCurrency = (amount?: number) => `₹${(typeof amount === "number" ? amount : 0).toLocaleString()}`
+  const displayName = customer?.display_name || customer?.customer_name || "Unknown customer"
+  const initials = displayName.split(/\s+/).slice(0, 2).map((name) => name[0]).join("").toUpperCase() || "CU"
+  const phone = customer?.phone_number || (customer?.contact_no ? String(customer.contact_no) : "Not provided")
+  const address = typeof customer?.address === "string" ? customer.address : customer?.address?.address || customer?.address?.formatted_address || "Not provided"
+  const completedBookings = bookings.filter((booking) => ["completed", "service_completed"].includes(booking.status?.toLowerCase() || ""))
+  const totalSpent = completedBookings.reduce((total, booking) => total + (booking.amount_paid || 0), 0)
 
-      try {
-        const customerRef = doc(db, "customer", customer.id)
-        const bookingsQuery = query(
-          collection(db, "bookings"),
-          where("customer_id", "==", customerRef)
-        )
-
-        const snapshot = await getDocs(bookingsQuery)
-        const bookingDocs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as BookingDoc[]
-
-        setBookings(bookingDocs)
-      } catch (err: any) {
-        console.error("Failed to load bookings for stats:", err)
-      }
-    }
-
-    fetchBookings()
-  }, [customer?.id, db])
-
-  // Fetch wallet info for statistics
-  useEffect(() => {
-    const fetchWalletInfo = async () => {
-      if (!customer?.id) return
-
-      try {
-        setWalletLoading(true)
-        const customerRef = doc(db, "customer", customer.id)
-        
-        const walletQuery = query(
-          collection(db, "partner_overall_credits"),
-          where("service_partner_id", "==", customerRef)
-        )
-        const snapshot = await getDocs(walletQuery)
-        
-        if (!snapshot.empty) {
-          const walletDoc = snapshot.docs[0]
-          setWalletInfo({ id: walletDoc.id, ...walletDoc.data() } as WalletDoc)
-        } else {
-          const directWalletDoc = await getDoc(doc(db, "partner_overall_credits", customer.id))
-          if (directWalletDoc.exists()) {
-            setWalletInfo({ id: directWalletDoc.id, ...directWalletDoc.data() } as WalletDoc)
-          }
-        }
-      } catch (err: any) {
-        console.error("Failed to load wallet info:", err)
-      } finally {
-        setWalletLoading(false)
-      }
-    }
-
-    fetchWalletInfo()
-  }, [customer?.id, db])
-
-  const formatDate = (timestamp?: Timestamp) => {
-    if (!timestamp?.toDate) return "—"
-    return timestamp.toDate().toLocaleString()
-  }
-
-  const formatCurrency = (amount?: number) => {
-    if (typeof amount !== 'number') return "₹0"
-    return `₹${amount.toLocaleString()}`
-  }
-
-  const getInitials = (name?: string) => {
-    if (!name) return "U"
-    return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
-  }
-
-  // Calculate statistics
-  const totalBookings = bookings.length
-  const completedBookings = bookings.filter(b => 
-    b.status?.toLowerCase() === 'completed' || b.status?.toLowerCase() === 'service_completed'
-  ).length
-  const totalSpent = bookings
-    .filter(b => b.status?.toLowerCase() === 'completed' || b.status?.toLowerCase() === 'service_completed')
-    .reduce((sum, b) => sum + (b.amount_paid || 0), 0)
+  const shell = (content: React.ReactNode) => (
+    <ProtectedRoute>
+      <div className="flex min-h-screen w-full flex-col bg-slate-50/80">
+        <div className="flex flex-col sm:gap-4 sm:py-4">
+          <AdminHeader title="Customer Details" />
+          <main className="mx-auto w-full max-w-[1800px] flex-1 p-3 sm:p-5 lg:p-6">{content}</main>
+        </div>
+      </div>
+    </ProtectedRoute>
+  )
 
   if (loading) {
-    return (
-      <ProtectedRoute>
-        <div className="flex min-h-screen w-full flex-col bg-muted/40">
-          <AdminSidebar />
-          <div className="flex flex-col sm:gap-4 sm:py-4">
-            <AdminHeader title="Customer Details" />
-            <main className="flex-1 p-4 md:p-6">
-              <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">Loading customer details...</span>
-              </div>
-            </main>
-          </div>
-        </div>
-      </ProtectedRoute>
+    return shell(
+      <div className="space-y-4" aria-label="Loading customer details">
+        <div className="h-10 w-40 animate-pulse rounded-lg bg-slate-200" />
+        <div className="h-56 animate-pulse rounded-2xl border bg-white" />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-28 animate-pulse rounded-xl border bg-white" />)}</div>
+        <div className="h-72 animate-pulse rounded-2xl border bg-white" />
+      </div>
     )
   }
 
   if (error || !customer) {
-    return (
-      <ProtectedRoute>
-        <div className="flex min-h-screen w-full flex-col bg-muted/40">
-          <AdminSidebar />
-          <div className="flex flex-col sm:gap-4 sm:py-4">
-            <AdminHeader title="Customer Details" />
-            <main className="flex-1 p-4 md:p-6">
-              <Card>
-                <CardContent className="p-8 text-center">
-                  <XCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
-                  <h3 className="text-lg font-semibold mb-2">Customer Not Found</h3>
-                  <p className="text-muted-foreground mb-4">{error || "The requested customer could not be found."}</p>
-                  <Button onClick={() => router.back()}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Go Back
-                  </Button>
-                </CardContent>
-              </Card>
-            </main>
-          </div>
-        </div>
-      </ProtectedRoute>
+    return shell(
+      <Card className="mx-auto mt-12 max-w-lg border-slate-200 shadow-sm">
+        <CardContent className="p-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50"><XCircle className="h-7 w-7 text-red-500" /></div>
+          <h2 className="text-lg font-semibold text-slate-950">Customer not found</h2>
+          <p className="mb-5 mt-2 text-sm text-slate-500">{error || "The requested customer could not be found."}</p>
+          <Button onClick={() => router.back()}><ArrowLeft className="mr-2 h-4 w-4" />Go back</Button>
+        </CardContent>
+      </Card>
     )
   }
 
-  return (
-    <ProtectedRoute>
-      <div className="flex min-h-screen w-full flex-col bg-muted/40">
-        <AdminSidebar />
-        <div className="flex flex-col sm:gap-4 sm:py-4">
-          <AdminHeader title="Customer Details" />
-          <main className="flex-1 space-y-6 p-4 md:p-6">
-            {/* Header with Back Button */}
-            <div className="flex items-center gap-4">
-              <Button variant="outline" onClick={() => router.back()}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Customers
-              </Button>
+  const stats = [
+    { label: "Total bookings", value: bookings.length.toLocaleString(), hint: "All booking activity", icon: CalendarDays, style: "bg-blue-50 text-blue-600" },
+    { label: "Completed", value: completedBookings.length.toLocaleString(), hint: "Successfully delivered", icon: CheckCircle2, style: "bg-emerald-50 text-emerald-600" },
+    { label: "Total spent", value: formatCurrency(totalSpent), hint: "Completed bookings", icon: TrendingUp, style: "bg-violet-50 text-violet-600" },
+    { label: "Wallet balance", value: walletLoading ? "Loading…" : formatCurrency(walletInfo?.credit_balance), hint: "Available credits", icon: Wallet, style: "bg-amber-50 text-amber-600" },
+  ]
+
+  return shell(
+    <div className="space-y-5">
+      <Button variant="ghost" onClick={() => router.back()} className="-ml-2 text-slate-600 hover:text-slate-950"><ArrowLeft className="mr-2 h-4 w-4" />Back to customers</Button>
+
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-indigo-50 shadow-sm">
+        <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-indigo-100/60 blur-3xl" />
+        <div className="relative grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(260px,0.75fr)_minmax(0,1.6fr)] lg:items-center">
+          <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+            <Avatar className="h-20 w-20 border-4 border-white shadow-md sm:h-24 sm:w-24">
+              <AvatarImage src={customer.photo_url} alt={displayName} /><AvatarFallback className="bg-indigo-100 text-xl font-semibold text-indigo-700">{initials}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                <h1 className="truncate text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">{displayName}</h1>
+                {customer.Subscription === "Active" && <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100"><Star className="mr-1 h-3 w-3" />Premium</Badge>}
+              </div>
+              <p className="mt-1 max-w-xs truncate font-mono text-xs text-slate-400">{customer.uid || customer.id}</p>
+              {customer.bio && <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-500">{customer.bio}</p>}
             </div>
+          </div>
 
-            {/* Customer Profile Card */}
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row gap-6">
-                  {/* Avatar and Basic Info */}
-                  <div className="flex flex-col items-center md:items-start gap-4">
-                    <Avatar className="w-24 h-24">
-                      <AvatarImage src={customer.photo_url} alt={customer.display_name || customer.customer_name} />
-                      <AvatarFallback className="text-lg">
-                        {getInitials(customer.display_name || customer.customer_name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="text-center md:text-left">
-                      <h2 className="text-2xl font-bold">{customer.display_name || customer.customer_name || "Unknown Customer"}</h2>
-                      <p className="text-muted-foreground">Customer ID: {customer.uid || customer.id}</p>
-                      {customer.Subscription === "Active" && (
-                        <Badge className="mt-2 bg-green-100 text-green-800">
-                          <Star className="w-3 h-3 mr-1" />
-                          Premium Member
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator orientation="vertical" className="hidden md:block" />
-
-                  {/* Contact Information */}
-                  <div className="flex-1 grid gap-4 md:grid-cols-2">
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <Mail className="w-4 h-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">Email</p>
-                          <p className="text-sm text-muted-foreground">{customer.email || "Not provided"}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Phone className="w-4 h-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">Phone</p>
-                          <p className="text-sm text-muted-foreground">
-                            {customer.phone_number || (customer.contact_no ? String(customer.contact_no) : "Not provided")}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">Member Since</p>
-                          <p className="text-sm text-muted-foreground">{formatDate(customer.created_time)}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <UserPlus className="w-4 h-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">Referral Code</p>
-                          <p className="text-sm font-mono text-muted-foreground bg-muted px-2 py-1 rounded">
-                            {customer.referralCode || "Not generated"}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {customer.bio && (
-                  <>
-                    <Separator className="my-6" />
-                    <div>
-                      <h4 className="font-medium mb-2">Bio</h4>
-                      <p className="text-sm text-muted-foreground">{customer.bio}</p>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Statistics Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <Calendar className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Total Bookings</p>
-                      <p className="text-2xl font-bold">{totalBookings}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Completed</p>
-                      <p className="text-2xl font-bold">{completedBookings}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <TrendingUp className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Total Spent</p>
-                      <p className="text-2xl font-bold">{formatCurrency(totalSpent)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-yellow-100 rounded-lg">
-                      <Wallet className="w-5 h-5 text-yellow-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Wallet Balance</p>
-                      <p className="text-2xl font-bold">
-                        {walletLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : formatCurrency(walletInfo?.credit_balance || 0)}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Tabbed Content */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Customer Information</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="bookings" className="flex items-center gap-2">
-                      <History className="w-4 h-4" />
-                      <span className="hidden sm:inline">Booking History</span>
-                      <span className="sm:hidden">Bookings</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="credits" className="flex items-center gap-2">
-                      <CreditCard className="w-4 h-4" />
-                      <span className="hidden sm:inline">Credits Summary</span>
-                      <span className="sm:hidden">Credits</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="referrals" className="flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      <span className="hidden sm:inline">Referral Summary</span>
-                      <span className="sm:hidden">Referrals</span>
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* Bookings Tab */}
-                  <TabsContent value="bookings" className="mt-6">
-                    <CustomerBookingsTab customerId={customerId} />
-                  </TabsContent>
-
-                  {/* Credits Tab */}
-                  <TabsContent value="credits" className="mt-6">
-                    <CustomerCreditsTab customerId={customerId} />
-                  </TabsContent>
-
-                  {/* Referrals Tab */}
-                  <TabsContent value="referrals" className="mt-6">
-                    <CustomerReferralsTab customer={customer} />
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </main>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              { icon: Mail, label: "Email", value: customer.email || "Not provided" },
+              { icon: Phone, label: "Phone", value: phone },
+              { icon: CalendarDays, label: "Member since", value: formatDate(customer.created_time) },
+              { icon: UserPlus, label: "Referral code", value: customer.referralCode || "Not generated" },
+              { icon: MapPin, label: "Address", value: address, wide: true },
+            ].map((item) => (
+              <div key={item.label} className={`flex min-w-0 items-start gap-3 rounded-xl border border-white/80 bg-white/80 p-3 shadow-sm ${item.wide ? "sm:col-span-2" : ""}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500"><item.icon className="h-4 w-4" /></div>
+                <div className="min-w-0"><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.label}</p><p className="mt-0.5 truncate text-sm font-medium text-slate-700" title={item.value}>{item.value}</p></div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-    </ProtectedRoute>
+      </section>
+
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat) => <Card key={stat.label} className="border-slate-200 shadow-sm"><CardContent className="flex items-center gap-4 p-4 sm:p-5"><div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${stat.style}`}><stat.icon className="h-5 w-5" /></div><div className="min-w-0"><p className="text-sm font-medium text-slate-500">{stat.label}</p><p className="truncate text-2xl font-bold text-slate-950">{stat.value}</p><p className="text-xs text-slate-400">{stat.hint}</p></div></CardContent></Card>)}
+      </section>
+
+      <Card className="overflow-hidden border-slate-200 shadow-sm">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <div className="border-b border-slate-200 bg-slate-50/60 p-2 sm:p-3">
+            <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0">
+              <TabsTrigger value="bookings" className="min-w-fit gap-2 rounded-lg px-4 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm"><History className="h-4 w-4" />Booking history</TabsTrigger>
+              <TabsTrigger value="credits" className="min-w-fit gap-2 rounded-lg px-4 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm"><CreditCard className="h-4 w-4" />Credits</TabsTrigger>
+              <TabsTrigger value="referrals" className="min-w-fit gap-2 rounded-lg px-4 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm"><Users className="h-4 w-4" />Referrals</TabsTrigger>
+            </TabsList>
+          </div>
+          <CardContent className="p-3 sm:p-5 lg:p-6">
+            <TabsContent value="bookings" className="m-0"><CustomerBookingsTab customerId={customerId} /></TabsContent>
+            <TabsContent value="credits" className="m-0"><CustomerCreditsTab customerId={customerId} /></TabsContent>
+            <TabsContent value="referrals" className="m-0"><CustomerReferralsTab customer={customer} /></TabsContent>
+          </CardContent>
+        </Tabs>
+      </Card>
+    </div>
   )
 }

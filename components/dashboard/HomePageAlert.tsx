@@ -61,7 +61,29 @@ function formatTimeAgo(date?: Date | null) {
 function getTimestampDate(value: any): Date | null {
   if (value instanceof Timestamp) return value.toDate();
   if (value?.toDate) return value.toDate();
+  const seconds = value?.seconds ?? value?._seconds;
+  if (typeof seconds === "number") return new Date(seconds * 1000);
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
   return null;
+}
+
+function getComplaintHistoryText(history: unknown) {
+  if (!Array.isArray(history)) return "";
+
+  const firstMeaningfulEntry = history.find((entry) => {
+    const item = entry as { message?: string; description?: string; note?: string };
+    return item?.message?.trim() || item?.description?.trim() || item?.note?.trim();
+  }) as { message?: string; description?: string; note?: string } | undefined;
+
+  return (
+    firstMeaningfulEntry?.message?.trim() ||
+    firstMeaningfulEntry?.description?.trim() ||
+    firstMeaningfulEntry?.note?.trim() ||
+    ""
+  );
 }
 
 export default function HomePageAlert() {
@@ -109,8 +131,7 @@ export default function HomePageAlert() {
 
     const complaintQuery = query(
       collection(db, "customer_complain"),
-      where("complaint_status", "in", ["pending", "Open"]),
-      limit(10)
+      where("complaint_status", "in", ["open", "Open"])
     );
 
     const startOfToday = new Date();
@@ -180,29 +201,51 @@ export default function HomePageAlert() {
       complaintCount = snap.size;
       setComplaints(complaintCount);
 
-      const items = snap.docs.slice(0, 5).map((doc) => {
-        const data = doc.data() as any;
-
-        const createdAt =
-          getTimestampDate(data.createdAt) ||
-          getTimestampDate(data.created_time);
-
-        return {
-          id: doc.id,
-          title:
+      const items = snap.docs
+        .map((documentSnapshot) => {
+          const data = documentSnapshot.data() as any;
+          const createdAt =
+            getTimestampDate(data.date_of_complaint) ||
+            getTimestampDate(data.createdAt) ||
+            getTimestampDate(data.created_time) ||
+            getTimestampDate(data.timeslot);
+          const complaintText =
+            data.customer_complaint ||
             data.complaintTitle ||
             data.subject ||
             data.reason ||
-            "Open complaint",
-          subtitle:
+            "Complaint";
+          const historyText = getComplaintHistoryText(data.complaint_history);
+          const customerDetail =
+            data.customer_title ||
             data.customerName ||
             data.customer_name ||
+            data.contact_no ||
+            data.customer_phone ||
             data.phone_number ||
-            data.description ||
-            "Complaint details not available",
-          createdAt,
-        };
-      });
+            "";
+          const note = data.notefrom_Insstanto?.trim?.() || "";
+          const supportingText = [customerDetail, historyText, note]
+            .filter((value, index, values) =>
+              Boolean(value) &&
+              String(value).trim().toLowerCase() !== String(complaintText).trim().toLowerCase() &&
+              values.indexOf(value) === index
+            )
+            .join(" • ");
+
+          return {
+            id: documentSnapshot.id,
+            title: String(complaintText),
+            subtitle: supportingText || `Complaint ID: ${documentSnapshot.id}`,
+            createdAt,
+          };
+        })
+        .sort(
+          (first, second) =>
+            (second.createdAt?.getTime() || 0) -
+            (first.createdAt?.getTime() || 0)
+        )
+        .slice(0, 5);
 
       setLatestComplaints(items);
       openIfNeeded();
@@ -370,7 +413,7 @@ export default function HomePageAlert() {
     },
     {
       key: "complaints",
-      title: "Pending Complaints",
+      title: "Open Complaints",
       count: complaints,
       icon: MessageSquareWarning,
       iconClass: "text-red-600",
@@ -378,7 +421,7 @@ export default function HomePageAlert() {
       borderClass: "border-red-200",
       items: latestComplaints,
       actionLabel: "View complaints",
-      path: "/support",
+      path: "/support?tab=tickets&status=open",
     },
     {
       key: "reviews",
@@ -390,7 +433,7 @@ export default function HomePageAlert() {
       borderClass: "border-yellow-200",
       items: latestReviews,
       actionLabel: "View reviews",
-      path: "/support",
+      path: "/support?tab=reviews",
     },
     {
       key: "payments",
@@ -460,7 +503,7 @@ export default function HomePageAlert() {
 
           <div className="rounded-xl border p-3">
             <div className="break-words text-xs text-muted-foreground">
-              Pending Complaints
+              Open Complaints
             </div>
             <div className="mt-1 text-2xl font-bold text-red-600">
               {complaints}
@@ -548,7 +591,7 @@ export default function HomePageAlert() {
 
                 <div className="mt-3 flex justify-end">
                   <Button variant="outline" size="sm" asChild>
-                    <Link href={card.path} onClick={() => setOpen(false)}>
+                    <Link href={card.path} prefetch>
                       {card.actionLabel}
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>

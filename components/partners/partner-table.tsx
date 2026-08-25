@@ -996,9 +996,9 @@ export function PartnerTable({
 
           <div className="flex items-start gap-3">
 
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-50">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50">
 
-              <Users className="h-5 w-5 text-cyan-600" />
+              <Users className="h-5 w-5 text-indigo-600" />
 
             </div>
 
@@ -1028,7 +1028,7 @@ export function PartnerTable({
 
                 {loading && (
 
-                  <span className="flex items-center gap-1 text-cyan-600">
+                  <span className="flex items-center gap-1 text-indigo-600">
 
                     <Loader2 className="h-3 w-3 animate-spin" />
 
@@ -1088,7 +1088,7 @@ export function PartnerTable({
                   e.target.value
                 )
               }
-              className="h-10 rounded-xl border-slate-200 bg-slate-50 pl-10 text-xs text-slate-700 shadow-none transition focus-visible:border-cyan-400 focus-visible:bg-white focus-visible:ring-cyan-100"
+              className="h-10 rounded-xl border-slate-200 bg-slate-50 pl-10 text-xs text-slate-700 shadow-none transition focus-visible:border-indigo-400 focus-visible:bg-white focus-visible:ring-indigo-100"
             />
 
           </div>
@@ -1390,7 +1390,7 @@ export function PartnerTable({
 
                           {/* AVATAR */}
 
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-50 to-blue-50 text-xs font-bold text-cyan-700 ring-1 ring-cyan-100">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 text-xs font-bold text-indigo-700 ring-1 ring-indigo-100">
 
                             {getInitials(
                               partner.display_name
@@ -1499,11 +1499,11 @@ export function PartnerTable({
 
                         {partner.serviceOptName ? (
 
-                          <div className="inline-flex max-w-[160px] items-center gap-1.5 rounded-lg border border-cyan-100 bg-cyan-50 px-2.5 py-1.5">
+                          <div className="inline-flex max-w-[160px] items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-1.5">
 
-                            <Briefcase className="h-3.5 w-3.5 shrink-0 text-cyan-600" />
+                            <Briefcase className="h-3.5 w-3.5 shrink-0 text-indigo-600" />
 
-                            <span className="truncate text-[10px] font-semibold text-cyan-700">
+                            <span className="truncate text-[10px] font-semibold text-indigo-700">
 
                               {
                                 partner.serviceOptName
@@ -1601,7 +1601,7 @@ export function PartnerTable({
                             size="icon"
                             variant="ghost"
                             title="View partner details"
-                            className="h-9 w-9 rounded-xl text-slate-400 transition hover:bg-cyan-50 hover:text-cyan-600"
+                            className="h-9 w-9 rounded-xl text-slate-400 transition hover:bg-indigo-50 hover:text-indigo-600"
                           >
 
                             <Eye className="h-4 w-4" />
@@ -1680,7 +1680,7 @@ export function PartnerTable({
 
             <div className="flex min-h-[280px] flex-col items-center justify-center">
 
-              <Loader2 className="h-7 w-7 animate-spin text-cyan-600" />
+              <Loader2 className="h-7 w-7 animate-spin text-indigo-600" />
 
               <p className="mt-3 text-xs font-medium text-slate-500">
                 Loading partners...

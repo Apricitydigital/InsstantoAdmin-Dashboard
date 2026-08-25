@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { AdminSidebar } from "@/components/admin-sidebar"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -228,7 +227,6 @@ export default function ServicesPage() {
 
   return (
     <div className="flex min-h-screen bg-muted/30">
-      <AdminSidebar />
       <main className="min-w-0 flex-1 space-y-6 p-4 pt-16 sm:p-6 sm:pt-16 lg:pt-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

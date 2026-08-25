@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AdminSidebar } from "@/components/admin-sidebar"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -108,7 +107,6 @@ export default function CouponsPage() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <AdminSidebar />
       <div className="min-w-0 flex-1 space-y-6 overflow-auto p-4 sm:p-6">
         <div className="flex justify-between items-center">
           <div>

@@ -1,136 +1,60 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, Clock, CheckCircle, Users, DollarSign, Star, TrendingUp, XCircle } from "lucide-react"
+import { CalendarDays, CheckCircle2, Clock3, IndianRupee, Star, TrendingUp, UserCheck, XCircle } from "lucide-react"
+
+import { Card, CardContent } from "@/components/ui/card"
 import { fetchBookingStats, type BookingStats } from "@/lib/queries/fetchBookingStats"
 
-type BookingStatsProps = {
-  fromDate: string;
-  toDate: string;
-};
+type Props = { fromDate: string; toDate: string }
 
-export default function BookingStats({ fromDate, toDate }: BookingStatsProps) {
+const visuals = [
+  { icon: CalendarDays, style: "bg-blue-50 text-blue-600", accent: "bg-blue-500" },
+  { icon: CheckCircle2, style: "bg-emerald-50 text-emerald-600", accent: "bg-emerald-500" },
+  { icon: Clock3, style: "bg-amber-50 text-amber-600", accent: "bg-amber-500" },
+  { icon: UserCheck, style: "bg-cyan-50 text-cyan-600", accent: "bg-cyan-500" },
+  { icon: IndianRupee, style: "bg-violet-50 text-violet-600", accent: "bg-violet-500" },
+  { icon: Star, style: "bg-yellow-50 text-yellow-600", accent: "bg-yellow-500" },
+  { icon: TrendingUp, style: "bg-indigo-50 text-indigo-600", accent: "bg-indigo-500" },
+  { icon: XCircle, style: "bg-red-50 text-red-600", accent: "bg-red-500" },
+]
+
+export default function BookingStatsView({ fromDate, toDate }: Props) {
   const [stats, setStats] = useState<BookingStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState("")
 
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        // ✅ Pass date range to Firestore query
-        const data = await fetchBookingStats(fromDate, toDate)
-        if (mounted) setStats(data)
-      } catch (e: any) {
-        if (mounted) setError(e?.message ?? "Failed to load stats")
-      } finally {
-        if (mounted) setLoading(false)
-      }
-    })()
-    return () => {
-      mounted = false
-    }
+    let active = true
+    setLoading(true)
+    setError("")
+    fetchBookingStats(fromDate, toDate)
+      .then((data) => active && setStats(data))
+      .catch((reason) => active && setError(reason?.message || "Failed to load booking statistics"))
+      .finally(() => active && setLoading(false))
+    return () => { active = false }
   }, [fromDate, toDate])
 
-  if (loading) return <div className="p-4 text-sm text-muted-foreground">Loading stats…</div>
-  if (error) return <div className="p-4 text-sm text-destructive">Error: {error}</div>
-  if (!stats) return null
-
   const cards = [
-    {
-      title: "Total Bookings",
-      value: stats.totalBookings.toLocaleString(),
-      description: "All time bookings",
-      icon: Calendar,
-      color: "text-teal-600",
-      bgColor: "bg-teal-100",
-      borderColor: "border-teal-600"
-    },
-    {
-      title: "Completed Bookings",
-      value: stats.completedBookings.toLocaleString(),
-      description: "Successfully finished",
-      icon: Users,
-      color: "text-blue-600",
-      bgColor: "bg-blue-100",
-      borderColor: "border-blue-600"
-    },
-    {
-      title: "Pending Bookings",
-      value: stats.pendingBookings,
-      description: "Awaiting confirmation",
-      icon: Clock,
-      color: "text-orange-600",
-      bgColor: "bg-orange-100",
-      borderColor: "border-orange-600"
-    },
-    {
-      title: "Accepted Bookings",
-      value: stats.confirmedBookings.toLocaleString(),
-      description: "Ready to start",
-      icon: CheckCircle,
-      color: "text-green-600",
-      bgColor: "bg-green-100",
-      borderColor: "border-green-600"
-    },
-    {
-      title: "Total Revenue",
-      value: `₹${Math.round(stats.totalRevenue).toLocaleString()}`,
-      description: "Sum of totalAmount",
-      icon: DollarSign,
-      color: "text-emerald-600",
-      bgColor: "bg-emerald-100",
-      borderColor: "border-emerald-600"
-    },
-    {
-      title: "Avg. Rating",
-      value: stats.averageRating ? stats.averageRating.toFixed(2) : "—",
-      description: "Average of rating",
-      icon: Star,
-      color: "text-yellow-600",
-      bgColor: "bg-yellow-100",
-      borderColor: "border-yellow-600"
-    },
-    {
-      title: "Completion Rate",
-      value: `${stats.completionRate.toFixed(1)}%`,
-      description: "Completed / Total",
-      icon: TrendingUp,
-      color: "text-purple-600",
-      bgColor: "bg-purple-100",
-      borderColor: "border-purple-600"
-    },
-    {
-      title: "Cancelled Bookings",
-      value: stats.cancelledByCustomer.toLocaleString(),
-      description: "Cancelled After Service Accepted",
-      icon: XCircle,
-      color: "text-red-600",
-      bgColor: "bg-red-100",
-      borderColor: "border-red-600"
-    },
+    { title: "Total bookings", value: stats?.totalBookings.toLocaleString() || "0", description: "Within selected period" },
+    { title: "Completed", value: stats?.completedBookings.toLocaleString() || "0", description: "Successfully finished" },
+    { title: "Pending", value: stats?.pendingBookings.toLocaleString() || "0", description: "Awaiting confirmation" },
+    { title: "Accepted", value: stats?.confirmedBookings.toLocaleString() || "0", description: "Confirmed by partner" },
+    { title: "Total revenue", value: `₹${Math.round(stats?.totalRevenue || 0).toLocaleString()}`, description: "Recorded booking revenue" },
+    { title: "Average rating", value: stats?.averageRating ? stats.averageRating.toFixed(2) : "—", description: "Customer booking rating" },
+    { title: "Completion rate", value: `${(stats?.completionRate || 0).toFixed(1)}%`, description: "Completed out of total" },
+    { title: "Cancelled", value: stats?.cancelledByCustomer.toLocaleString() || "0", description: "Cancelled after acceptance" },
   ]
 
+  if (error) return <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {cards.map((c) => (
-        <Card
-          key={c.title}
-          className={`border-l-4 ${c.borderColor} ${c.bgColor} shadow-sm transition-transform hover:scale-[1.02] hover:shadow-md`}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{c.title}</CardTitle>
-            <div className={`p-2 rounded-lg ${c.bgColor.replace("100", "200")}`}>
-              <c.icon className={`h-4 w-4 ${c.color}`} />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${c.color}`}>{c.value}</div>
-            <p className="text-xs text-muted-foreground">{c.description}</p>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <section aria-label="Booking statistics" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {cards.map((card, index) => {
+        const visual = visuals[index]
+        const Icon = visual.icon
+        return <Card key={card.title} className="relative overflow-hidden border-slate-200 bg-white shadow-sm"><div className={`absolute inset-y-0 left-0 w-1 ${visual.accent}`} /><CardContent className="flex items-center justify-between gap-3 p-4 sm:p-5"><div className="min-w-0"><p className="truncate text-sm font-medium text-slate-500">{card.title}</p>{loading ? <div className="mt-2 h-8 w-20 animate-pulse rounded bg-slate-100" /> : <p className="mt-1 truncate text-2xl font-bold tracking-tight text-slate-950">{card.value}</p>}<p className="mt-1 truncate text-xs text-slate-400">{card.description}</p></div><div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${visual.style}`}><Icon className="h-5 w-5" /></div></CardContent></Card>
+      })}
+    </section>
   )
 }

@@ -68,11 +68,15 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
   return (
     <header
       data-admin-header
-      className="fixed top-0 right-0 left-0 z-40 flex h-14 min-h-14 items-center gap-2 border-b bg-background/95 px-3 pl-16 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:gap-3 sm:px-4 sm:pl-16 lg:left-[var(--admin-sidebar-width,256px)] lg:h-[60px] lg:min-h-[60px] lg:px-6"
+      className="fixed left-0 right-0 top-0 z-40 flex h-14 min-h-14 items-center gap-2 border-b border-slate-800 bg-slate-950/95 px-3 pl-16 text-white shadow-md shadow-slate-950/10 backdrop-blur supports-[backdrop-filter]:bg-slate-950/90 sm:gap-3 sm:px-4 sm:pl-16 lg:left-[var(--admin-sidebar-width,272px)] lg:h-[60px] lg:min-h-[60px] lg:px-6"
     >
       {/* Title */}
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-base font-semibold sm:text-lg md:text-xl xl:text-2xl">{title}</h1>
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="hidden h-8 w-1 rounded-full bg-indigo-500 sm:block" />
+        <div className="min-w-0">
+          <p className="hidden text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500 sm:block">Admin workspace</p>
+          <h1 className="truncate text-base font-semibold tracking-tight text-white sm:text-lg md:text-xl">{title}</h1>
+        </div>
       </div>
 
       {/* Actions */}
@@ -83,7 +87,7 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
             <Button
               variant="outline"
               size="icon"
-              className="relative size-9 bg-transparent p-0"
+              className="relative size-9 border-white/10 bg-white/[0.06] p-0 text-slate-200 shadow-none hover:border-indigo-400/30 hover:bg-indigo-500/15 hover:text-white"
               title="Notifications"
             >
               <Bell className="size-4" />
@@ -96,8 +100,8 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
             </Button>
           </PopoverTrigger>
 
-          <PopoverContent align="end" className="w-[min(20rem,calc(100vw-1rem))] p-0">
-            <div className="border-b px-4 py-2 font-semibold">
+          <PopoverContent align="end" className="w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-xl border-slate-200 p-0 shadow-xl">
+            <div className="border-b border-slate-100 bg-slate-50 px-4 py-3 font-semibold text-slate-900">
               Notifications
             </div>
 
@@ -110,7 +114,7 @@ export function AdminHeader({ title = "Dashboard" }: AdminHeaderProps) {
                 {notifications.map((item) => (
                   <div
                     key={item.id}
-                    className="px-4 py-3 border-b last:border-b-0 hover:bg-muted/50 transition"
+                    className="border-b border-slate-100 px-4 py-3 transition last:border-b-0 hover:bg-indigo-50/60"
                   >
                     <div className="text-sm font-medium">
                       {item.title}

@@ -10,6 +10,7 @@ import {
   query,
   where,
   orderBy,
+  runTransaction,
   Timestamp,
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
@@ -36,8 +38,11 @@ import {
   AlertCircle,
   TrendingUp,
   TrendingDown,
-  Receipt
+  Receipt,
+  Plus,
+  Minus
 } from "lucide-react"
+import { useAuth } from "@/lib/auth"
 
 type WalletDoc = {
   id: string
@@ -58,6 +63,8 @@ type CreditPurchaseRecord = {
   user_type?: any
   expiryDate?: Timestamp
   WalletBonusStatus?: string
+  payment_type?: string
+  note?: string
 }
 
 type ChemicalSpendRecord = {
@@ -66,6 +73,8 @@ type ChemicalSpendRecord = {
   partnerId?: any
   spend_date?: Timestamp
   chemical_spend?: number
+  credits_spent?: number
+  note?: string
 }
 
 const PAGE_SIZE = 10
@@ -76,6 +85,8 @@ interface CustomerCreditsTabProps {
 
 export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
   const db = getFirestoreDb()
+  const { hasPermission, user } = useAuth()
+  const canManageCredits = hasPermission("customers:write")
   
   const [walletInfo, setWalletInfo] = useState<WalletDoc | null>(null)
   const [purchaseRecords, setPurchaseRecords] = useState<CreditPurchaseRecord[]>([])
@@ -93,6 +104,14 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
   // Spend filters and pagination
   const [spendSearchTerm, setSpendSearchTerm] = useState("")
   const [spendCurrentPage, setSpendCurrentPage] = useState(1)
+  const [adjustmentType, setAdjustmentType] = useState<"add" | "deduct">("add")
+  const [adjustmentAmount, setAdjustmentAmount] = useState("")
+  const [paymentType, setPaymentType] = useState("")
+  const [adjustmentNote, setAdjustmentNote] = useState("")
+  const [adjusting, setAdjusting] = useState(false)
+  const [creatingWallet, setCreatingWallet] = useState(false)
+  const [adjustmentError, setAdjustmentError] = useState("")
+  const [adjustmentSuccess, setAdjustmentSuccess] = useState("")
 
   // Fetch wallet information
   useEffect(() => {
@@ -251,6 +270,232 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
     }
   }, [customerId, db, activeSubTab])
 
+  const createCustomerWallet = async () => {
+    if (!canManageCredits || !customerId || creatingWallet) return
+
+    setCreatingWallet(true)
+    setAdjustmentError("")
+    setAdjustmentSuccess("")
+
+    try {
+      const walletReference = doc(db, "partner_overall_credits", customerId)
+      const customerReference = doc(db, "customer", customerId)
+
+      await runTransaction(db, async (transaction) => {
+        const walletSnapshot = await transaction.get(walletReference)
+        if (walletSnapshot.exists()) return
+
+        const now = Timestamp.now()
+        transaction.set(walletReference, {
+          service_partner_id: customerReference,
+          credit_balance: 0,
+          user_type: "customer",
+          WalletBonusStatus: "active",
+          createdAt: now,
+          edited_time: now,
+          created_by: user?.id || "admin",
+        })
+      })
+
+      setWalletInfo({
+        id: customerId,
+        service_partner_id: customerReference,
+        credit_balance: 0,
+        user_type: "customer",
+        WalletBonusStatus: "active",
+      })
+      setAdjustmentSuccess("Customer wallet created successfully.")
+    } catch (walletError) {
+      console.error("Customer wallet creation failed:", walletError)
+      setAdjustmentError("Customer wallet creation failed. Please try again.")
+    } finally {
+      setCreatingWallet(false)
+    }
+  }
+
+  const submitCreditAdjustment = async () => {
+    if (!canManageCredits || !customerId || adjusting) return
+
+    const amount = Number(adjustmentAmount)
+    const note = adjustmentNote.trim()
+    const selectedPaymentType = paymentType.trim()
+    const currentBalance = Number(walletInfo?.credit_balance || 0)
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setAdjustmentError("Enter a credit amount greater than zero.")
+      return
+    }
+    if (adjustmentType === "add" && !selectedPaymentType) {
+      setAdjustmentError("Payment type is required when adding customer credits.")
+      return
+    }
+    if (!note) {
+      setAdjustmentError("Add a reason for this wallet adjustment.")
+      return
+    }
+    if (adjustmentType === "deduct" && amount > currentBalance) {
+      setAdjustmentError("The deduction cannot be greater than the wallet balance.")
+      return
+    }
+
+    const action = adjustmentType === "add" ? "add" : "deduct"
+    if (
+      !window.confirm(
+        `Confirm that you want to ${action} ${amount.toLocaleString(
+          "en-IN"
+        )} customer credits?`
+      )
+    ) {
+      return
+    }
+
+    setAdjusting(true)
+    setAdjustmentError("")
+    setAdjustmentSuccess("")
+
+    try {
+      const customerReference = doc(db, "customer", customerId)
+      const walletReference = doc(
+        db,
+        "partner_overall_credits",
+        walletInfo?.id || customerId
+      )
+      const historyReference = doc(
+        collection(
+          db,
+          adjustmentType === "add"
+            ? "credits_purchase_record"
+            : "chemical_spend_record"
+        )
+      )
+      let updatedBalance = 0
+      const now = Timestamp.now()
+
+      await runTransaction(db, async (transaction) => {
+        const walletSnapshot = await transaction.get(walletReference)
+        const balance = walletSnapshot.exists()
+          ? Number(walletSnapshot.data().credit_balance || 0)
+          : 0
+
+        if (adjustmentType === "deduct" && amount > balance) {
+          throw new Error("INSUFFICIENT_CREDITS")
+        }
+
+        updatedBalance =
+          adjustmentType === "add" ? balance + amount : balance - amount
+        const auditFields = {
+          note,
+          reason: note,
+          source: "admin_adjustment",
+          admin_adjustment: true,
+          created_by: user?.id || "admin",
+          created_by_email: user?.email || "",
+        }
+
+        if (walletSnapshot.exists()) {
+          transaction.update(walletReference, {
+            credit_balance: updatedBalance,
+            edited_time: now,
+            updated_by: user?.id || "admin",
+          })
+        } else {
+          transaction.set(walletReference, {
+            service_partner_id: customerReference,
+            credit_balance: updatedBalance,
+            user_type: "customer",
+            WalletBonusStatus: "active",
+            createdAt: now,
+            edited_time: now,
+            created_by: user?.id || "admin",
+          })
+        }
+
+        if (adjustmentType === "add") {
+          transaction.set(historyReference, {
+            partnerId: customerReference,
+            credits_purchased: amount,
+            amount_paid: amount,
+            payment_type: selectedPaymentType,
+            purchase_date: now,
+            status: "completed",
+            user_type: "customer",
+            ...auditFields,
+          })
+        } else {
+          transaction.set(historyReference, {
+            partnerId: customerReference,
+            credits_spent: amount,
+            chemical_spend: amount,
+            spend_date: now,
+            bookingId: null,
+            user_type: "customer",
+            ...auditFields,
+          })
+        }
+      })
+
+      setWalletInfo((current) => ({
+        ...(current || {
+          id: customerId,
+          service_partner_id: customerReference,
+          user_type: "customer",
+          WalletBonusStatus: "active",
+        }),
+        credit_balance: updatedBalance,
+      }))
+
+      if (adjustmentType === "add") {
+        setPurchaseRecords((records) => [
+          {
+            id: historyReference.id,
+            partnerId: customerReference,
+            credits_purchased: amount,
+            amount_paid: amount,
+            payment_type: selectedPaymentType,
+            purchase_date: now,
+            status: "completed",
+            user_type: "customer",
+            note,
+          },
+          ...records,
+        ])
+        setActiveSubTab("purchases")
+      } else {
+        setSpendRecords((records) => [
+          {
+            id: historyReference.id,
+            partnerId: customerReference,
+            credits_spent: amount,
+            chemical_spend: amount,
+            spend_date: now,
+            note,
+          },
+          ...records,
+        ])
+        setActiveSubTab("spends")
+      }
+
+      setAdjustmentAmount("")
+      setPaymentType("")
+      setAdjustmentNote("")
+      setAdjustmentSuccess(
+        `${amount.toLocaleString("en-IN")} credits ${
+          adjustmentType === "add" ? "added to" : "deducted from"
+        } the customer wallet.`
+      )
+    } catch (creditError) {
+      console.error("Customer credit adjustment failed:", creditError)
+      setAdjustmentError(
+        creditError instanceof Error &&
+          creditError.message === "INSUFFICIENT_CREDITS"
+          ? "The wallet balance changed and no longer has enough credits."
+          : "Credit adjustment failed. No balance or history changes were saved."
+      )
+    } finally {
+      setAdjusting(false)
+    }
+  }
+
   const formatDate = (timestamp?: Timestamp) => {
     if (!timestamp?.toDate) return "—"
     return timestamp.toDate().toLocaleString()
@@ -288,6 +533,7 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
         record.status,
         record.credits_purchased?.toString(),
         record.amount_paid?.toString(),
+        record.payment_type,
       ]
         .map(v => (v ?? "").toString().toLowerCase())
         .join(" ")
@@ -425,6 +671,121 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
         </Card> */}
       </div>
 
+      {canManageCredits && (
+        <Card>
+          <CardContent className="space-y-4 p-4 sm:p-6">
+            <div>
+              <h4 className="font-semibold">Manage Customer Wallet</h4>
+              <p className="text-sm text-muted-foreground">
+                Add or deduct credits and create the matching wallet history record.
+              </p>
+            </div>
+
+            {adjustmentError && (
+              <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {adjustmentError}
+              </div>
+            )}
+            {adjustmentSuccess && (
+              <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+                {adjustmentSuccess}
+              </div>
+            )}
+
+            {!walletInfo && !walletLoading && (
+              <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium text-amber-900">Customer wallet is not created</p>
+                  <p className="text-sm text-amber-700">
+                    Create it with a zero balance, or it will be created automatically with the first credit addition.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={creatingWallet}
+                  onClick={() => void createCustomerWallet()}
+                >
+                  {creatingWallet && <Loader2 className="mr-2 size-4 animate-spin" />}
+                  Create Wallet
+                </Button>
+              </div>
+            )}
+
+            <div className="grid gap-4 lg:grid-cols-[170px_190px_220px_1fr_auto] lg:items-end">
+              <label className="text-sm font-medium">
+                Adjustment
+                <select
+                  value={adjustmentType}
+                  onChange={(event) =>
+                    setAdjustmentType(event.target.value as "add" | "deduct")
+                  }
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="add">Add credits</option>
+                  <option value="deduct">Deduct credits</option>
+                </select>
+              </label>
+
+              <label className="text-sm font-medium">
+                Credit amount
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={adjustmentAmount}
+                  onChange={(event) => setAdjustmentAmount(event.target.value)}
+                  placeholder="Enter amount"
+                  className="mt-1"
+                />
+              </label>
+
+              <label className="text-sm font-medium">
+                Payment type {adjustmentType === "add" ? "*" : ""}
+                <Input
+                  value={paymentType}
+                  onChange={(event) => setPaymentType(event.target.value)}
+                  placeholder="Cash, UPI, card..."
+                  disabled={adjustmentType === "deduct"}
+                  className="mt-1"
+                />
+              </label>
+
+              <label className="text-sm font-medium">
+                Reason / admin note
+                <Textarea
+                  value={adjustmentNote}
+                  onChange={(event) => setAdjustmentNote(event.target.value)}
+                  placeholder="Required for audit history"
+                  className="mt-1 min-h-10"
+                />
+              </label>
+
+              <Button
+                type="button"
+                disabled={adjusting}
+                onClick={() => void submitCreditAdjustment()}
+                className={
+                  adjustmentType === "deduct"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-green-600 hover:bg-green-700"
+                }
+              >
+                {adjusting ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : adjustmentType === "add" ? (
+                  <Plus className="mr-2 size-4" />
+                ) : (
+                  <Minus className="mr-2 size-4" />
+                )}
+                {adjustmentType === "add" ? "Add Credits" : "Deduct Credits"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Sub-tabs for Purchases and Spends */}
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
@@ -494,6 +855,7 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
                       <TableHead>Record ID</TableHead>
                       <TableHead>Credits Purchased</TableHead>
                       <TableHead>Amount Paid</TableHead>
+                      <TableHead>Payment Type</TableHead>
                       <TableHead>Purchase Date</TableHead>
                       <TableHead>Expiry Date</TableHead>
                       <TableHead>Status</TableHead>
@@ -509,6 +871,7 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
                         <TableCell className="font-medium">
                           {formatCurrency(record.amount_paid)}
                         </TableCell>
+                        <TableCell>{record.payment_type || "—"}</TableCell>
                         <TableCell className="text-sm">
                           {formatDate(record.purchase_date)}
                         </TableCell>

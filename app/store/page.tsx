@@ -16,7 +16,6 @@ import {
   DocumentReference,
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
-import { AdminSidebar } from "@/components/admin-sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -218,7 +217,6 @@ const fetchOrders = async (next = false) => {
   /* ---------- RENDER ---------- */
   return (
     <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-gray-50">
-      <AdminSidebar />
       <div className="min-w-0 max-w-full flex-1 space-y-6 overflow-x-hidden p-4 sm:p-6">
         {/* Header */}
         <div className="flex justify-between items-center">

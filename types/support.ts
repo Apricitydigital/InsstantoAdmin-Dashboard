@@ -4,6 +4,10 @@ export interface SupportTicket {
   customerName: string
   bookingId?: string
   type: "complaint" | "query" | "refund" | "technical"
+  category: ComplaintCategory
+  isRepeatedComplaint: boolean
+  isDuplicateComplaint: boolean
+  relatedComplaintCount: number
   priority: "low" | "medium" | "high" | "urgent"
   status: "open" | "in_progress" | "resolved" | "closed"
   subject: string
@@ -16,6 +20,16 @@ export interface SupportTicket {
   note: string
   resolutionNote?: string
 }
+
+export type ComplaintCategory =
+  | "general"
+  | "duplicate_payment"
+  | "payment_refund"
+  | "service_related"
+  | "app_technical"
+  | "booking_related"
+  | "provider_related"
+  | "account_related"
 
 export interface Review {
   id: string

@@ -478,7 +478,7 @@ export function PartnerStats({
               "/partners/live-tracking"
             )
           }
-          className="group relative cursor-pointer overflow-hidden border border-cyan-200 bg-gradient-to-br from-cyan-50 via-white to-emerald-50 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg"
+          className="group relative cursor-pointer overflow-hidden border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-blue-50 shadow-sm transition-shadow duration-300 hover:border-indigo-300 hover:shadow-lg"
         >
 
           <CardContent className="p-5">
@@ -487,9 +487,9 @@ export function PartnerStats({
 
               {/* MAP ICON */}
 
-              <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-100">
+              <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100">
 
-                <MapPin className="h-5 w-5 text-cyan-700" />
+                <MapPin className="h-5 w-5 text-indigo-700" />
 
                 {/* LIVE DOT */}
 
@@ -505,7 +505,7 @@ export function PartnerStats({
 
               {/* ARROW */}
 
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-cyan-100 bg-white text-cyan-700 transition-all duration-300 group-hover:bg-cyan-600 group-hover:text-white">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-indigo-100 bg-white text-indigo-700 transition-all duration-300 group-hover:bg-indigo-600 group-hover:text-white">
 
                 <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
 

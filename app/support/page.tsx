@@ -9,7 +9,7 @@ import {
   useState,
 } from "react"
 
-import { AdminSidebar } from "@/components/admin-sidebar"
+import { BookingDetailsById } from "@/components/bookings/booking-details-by-id"
 
 import {
   Card,
@@ -39,14 +39,6 @@ import {
 } from "@/components/ui/tabs"
 
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-import {
   AlertTriangle,
   CheckCircle,
   Clock,
@@ -66,7 +58,10 @@ import {
   type Review,
 } from "@/lib/queries/support"
 
-import type { SupportTicket } from "@/types/support"
+import type {
+  ComplaintCategory,
+  SupportTicket,
+} from "@/types/support"
 import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
 import { useAuth } from "@/lib/auth"
 
@@ -101,6 +96,20 @@ const STATUS_CLASS: Record<string, string> = {
 
 const FALLBACK_BADGE_CLASS =
   "border-gray-200 bg-gray-100 text-gray-800"
+
+const CATEGORY_LABELS: Record<ComplaintCategory, string> = {
+  general: "General complaint",
+  duplicate_payment: "Duplicate payment",
+  payment_refund: "Payment / refund",
+  service_related: "Service related",
+  app_technical: "App technical issue",
+  booking_related: "Booking related",
+  provider_related: "Provider related",
+  account_related: "Account related",
+}
+
+type CategoryFilter = "all" | ComplaintCategory
+type RepeatFilter = "all" | "only_duplicates" | "exclude_duplicates"
 
 // ============================================================
 // TYPES
@@ -224,6 +233,16 @@ export default function SupportPage() {
     setStatusFilter,
   ] = useState("all")
 
+  const [
+    categoryFilter,
+    setCategoryFilter,
+  ] = useState<CategoryFilter>("all")
+
+  const [
+    repeatFilter,
+    setRepeatFilter,
+  ] = useState<RepeatFilter>("all")
+
   const [fromDate, setFromDate] =
     useState("")
 
@@ -232,6 +251,25 @@ export default function SupportPage() {
 
   const [activeTab, setActiveTab] =
     useState("tickets")
+
+  useEffect(() => {
+    const parameters = new URLSearchParams(window.location.search)
+    const requestedTab = parameters.get("tab")
+    const requestedStatus = parameters.get("status")
+    const requestedSearch = parameters.get("search")
+
+    if (requestedTab === "tickets" || requestedTab === "reviews") {
+      setActiveTab(requestedTab)
+    }
+
+    if (["all", "open", "in_progress", "resolved", "closed"].includes(requestedStatus || "")) {
+      setStatusFilter(requestedStatus || "all")
+    }
+
+    if (requestedSearch) {
+      setSearchTerm(requestedSearch)
+    }
+  }, [])
 
   // ----------------------------------------------------------
   // DATA STATES
@@ -285,6 +323,11 @@ export default function SupportPage() {
   ] = useState<SupportTicket | null>(
     null
   )
+
+  const [
+    selectedBookingId,
+    setSelectedBookingId,
+  ] = useState<string | null>(null)
 
   const [
     completionNote,
@@ -586,6 +629,11 @@ export default function SupportPage() {
             ticket.customerName,
             ticket.contact_no,
             ticket.type,
+            ticket.category,
+            CATEGORY_LABELS[ticket.category],
+            ticket.isRepeatedComplaint
+              ? "repeated complaint"
+              : "",
             ticket.priority,
             ticket.status,
             ticket.bookingId,
@@ -611,6 +659,8 @@ export default function SupportPage() {
       if (
         !normalizedTerm &&
         statusFilter === "all" &&
+        categoryFilter === "all" &&
+        repeatFilter === "all" &&
         !fromDate &&
         !toDate
       ) {
@@ -629,6 +679,16 @@ export default function SupportPage() {
             statusFilter === "all" ||
             ticket.status ===
               statusFilter
+
+          const matchesCategory =
+            categoryFilter === "all" ||
+            ticket.category === categoryFilter
+
+          const matchesRepeatFilter =
+            repeatFilter === "all" ||
+            (repeatFilter === "only_duplicates"
+              ? ticket.isDuplicateComplaint
+              : !ticket.isDuplicateComplaint)
 
           const createdAt =
             getDateValue(ticket.createdAt)
@@ -652,6 +712,8 @@ export default function SupportPage() {
           return (
             matchesSearch &&
             matchesStatus &&
+            matchesCategory &&
+            matchesRepeatFilter &&
             matchesDateRange
           )
         }
@@ -660,6 +722,8 @@ export default function SupportPage() {
       ticketsWithSearchText,
       deferredSearchTerm,
       statusFilter,
+      categoryFilter,
+      repeatFilter,
       fromDate,
       toDate,
     ])
@@ -894,6 +958,8 @@ export default function SupportPage() {
     useCallback(() => {
       setSearchTerm("")
       setStatusFilter("all")
+      setCategoryFilter("all")
+      setRepeatFilter("all")
       setFromDate("")
       setToDate("")
       setCurrentPageTickets(1)
@@ -902,6 +968,8 @@ export default function SupportPage() {
   const hasActiveFilters =
     Boolean(searchTerm.trim()) ||
     statusFilter !== "all" ||
+    categoryFilter !== "all" ||
+    repeatFilter !== "all" ||
     Boolean(fromDate) ||
     Boolean(toDate)
 
@@ -911,7 +979,6 @@ export default function SupportPage() {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <AdminSidebar />
 
       <main className="min-w-0 flex-1 overflow-x-hidden">
         <div className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6">
@@ -1130,12 +1197,12 @@ export default function SupportPage() {
               className="space-y-4"
             >
               <Card className="overflow-hidden">
-                <div className="flex flex-col gap-4 border-b p-4 lg:flex-row lg:items-center">
-                  <div className="relative min-w-0 flex-1">
+                <div className="space-y-4 border-b p-4">
+                  <div className="relative min-w-0 max-w-2xl">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
                     <Input
-                      placeholder="Search by customer, subject, contact, ticket ID..."
+                      placeholder="Search by customer, complaint, booking ID or ticket ID..."
                       value={searchTerm}
                       onChange={(
                         event
@@ -1153,7 +1220,50 @@ export default function SupportPage() {
                     />
                   </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    <label className="min-w-0 text-xs font-medium text-gray-600">
+                      Category
+                      <select
+                        aria-label="Filter complaints by category"
+                        value={categoryFilter}
+                        onChange={(event) => {
+                          setCategoryFilter(event.target.value as CategoryFilter)
+                          setCurrentPageTickets(1)
+                        }}
+                        className="mt-1 h-10 w-full rounded-md border border-input bg-white px-3 text-sm shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                      >
+                        <option value="all">All Categories</option>
+                        {Object.entries(CATEGORY_LABELS).map(
+                          ([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </label>
+
+                    <label className="min-w-0 text-xs font-medium text-gray-600">
+                      Duplicate records
+                      <select
+                        aria-label="Filter duplicate complaint records"
+                        value={repeatFilter}
+                        onChange={(event) => {
+                          setRepeatFilter(event.target.value as RepeatFilter)
+                          setCurrentPageTickets(1)
+                        }}
+                        className="mt-1 h-10 w-full rounded-md border border-input bg-white px-3 text-sm shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                      >
+                        <option value="all">All complaint records</option>
+                        <option value="exclude_duplicates">
+                          Exclude duplicate/repeated
+                        </option>
+                        <option value="only_duplicates">
+                          Only duplicate/repeated
+                        </option>
+                      </select>
+                    </label>
+
                     <label className="text-xs font-medium text-gray-600">
                       From
                       <Input
@@ -1184,54 +1294,36 @@ export default function SupportPage() {
                       />
                     </label>
 
-                    <Select
-                      value={
-                        statusFilter
-                      }
-                      onValueChange={(
-                        value
-                      ) => {
-                        setStatusFilter(
-                          value
-                        )
+                    <label className="min-w-0 text-xs font-medium text-gray-600">
+                      Status
+                      <select
+                        aria-label="Filter complaints by status"
+                        value={statusFilter}
+                        onChange={(event) => {
+                          setStatusFilter(event.target.value)
+                          setCurrentPageTickets(1)
+                        }}
+                        className="mt-1 h-10 w-full rounded-md border border-input bg-white px-3 text-sm shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                      >
+                        <option value="all">All Status</option>
+                        <option value="open">Open</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </label>
 
-                        setCurrentPageTickets(
-                          1
-                        )
-                      }}
-                    >
-                      <SelectTrigger className="w-full sm:w-48">
-                        <SelectValue placeholder="Filter by status" />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        <SelectItem value="all">
-                          All Status
-                        </SelectItem>
-
-                        <SelectItem value="open">
-                          Open
-                        </SelectItem>
-
-                        <SelectItem value="in_progress">
-                          In Progress
-                        </SelectItem>
-
-                        <SelectItem value="resolved">
-                          Resolved
-                        </SelectItem>
-
-                        <SelectItem value="closed">
-                          Closed
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {hasActiveFilters && (
+                    <div className="flex items-end">
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
+                        className={`h-10 w-full ${
+                          hasActiveFilters
+                            ? ""
+                            : "invisible pointer-events-none"
+                        }`}
+                        aria-hidden={!hasActiveFilters}
+                        tabIndex={hasActiveFilters ? 0 : -1}
                         onClick={
                           clearTicketFilters
                         }
@@ -1239,7 +1331,7 @@ export default function SupportPage() {
                         <X className="mr-1 h-4 w-4" />
                         Clear
                       </Button>
-                    )}
+                    </div>
                   </div>
                 </div>
 
@@ -1260,7 +1352,11 @@ export default function SupportPage() {
                         </TableHead>
 
                         <TableHead>
-                          Type
+                          Category
+                        </TableHead>
+
+                        <TableHead className="whitespace-nowrap">
+                          Booking ID
                         </TableHead>
 
                         <TableHead>
@@ -1272,7 +1368,7 @@ export default function SupportPage() {
                         </TableHead>
 
                         <TableHead className="whitespace-nowrap">
-                          Created
+                          Complaint date &amp; time
                         </TableHead>
 
                         <TableHead className="text-right">
@@ -1287,7 +1383,7 @@ export default function SupportPage() {
                         0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={8}
+                            colSpan={9}
                             className="h-40 text-center"
                           >
                             <div className="flex items-center justify-center gap-2 text-gray-500">
@@ -1301,7 +1397,7 @@ export default function SupportPage() {
                         0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={8}
+                            colSpan={9}
                             className="h-40 text-center text-gray-500"
                           >
                             No tickets
@@ -1355,14 +1451,38 @@ export default function SupportPage() {
                               </TableCell>
 
                               <TableCell>
-                                <Badge
-                                  variant="outline"
-                                  className="capitalize"
-                                >
-                                  {
-                                    ticket.type
-                                  }
-                                </Badge>
+                                <div className="flex min-w-max flex-col items-start gap-1">
+                                  <Badge
+                                    variant="outline"
+                                    className="whitespace-nowrap"
+                                  >
+                                    {CATEGORY_LABELS[ticket.category]}
+                                  </Badge>
+                                  {ticket.isRepeatedComplaint && (
+                                    <Badge className="border-purple-200 bg-purple-100 text-purple-800">
+                                      Repeated ×{ticket.relatedComplaintCount}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="whitespace-nowrap">
+                                {ticket.bookingId ? (
+                                  <Button
+                                    type="button"
+                                    variant="link"
+                                    size="sm"
+                                    className="h-auto max-w-40 justify-start truncate p-0 font-mono text-xs"
+                                    title={`Open booking ${ticket.bookingId}`}
+                                    onClick={() =>
+                                      setSelectedBookingId(ticket.bookingId ?? null)
+                                    }
+                                  >
+                                    {ticket.bookingId}
+                                  </Button>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
                               </TableCell>
 
                               <TableCell>
@@ -1398,9 +1518,7 @@ export default function SupportPage() {
                               </TableCell>
 
                               <TableCell className="whitespace-nowrap">
-                                {formatDate(
-                                  ticket.createdAt
-                                )}
+                                {formatDateTime(ticket.createdAt)}
                               </TableCell>
 
                               <TableCell className="text-right">
@@ -1968,6 +2086,14 @@ export default function SupportPage() {
           </div>
         </div>
       )}
+
+      <BookingDetailsById
+        bookingId={selectedBookingId}
+        open={Boolean(selectedBookingId)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedBookingId(null)
+        }}
+      />
     </div>
   )
 }

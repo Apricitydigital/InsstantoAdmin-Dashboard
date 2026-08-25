@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, Phone, Calendar, Search, Filter, ChevronDown } from "lucide-react"
+import { Loader2, Phone, Calendar, Search, Filter, ChevronDown, Eye, MapPin, Clock3, IndianRupee, RotateCcw } from "lucide-react"
 import { DetailsSheet } from "@/components/bookings/booking-component"
 
 // ✅ import from partner.ts
@@ -124,11 +124,11 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
             })
 
           setAllBookings(filteredDocs)
-
-          await hydrateParties(filteredDocs)
-          await fetchServicesInfo(filteredDocs)
-
           setLoading(false)
+          await Promise.all([
+            hydrateParties(filteredDocs),
+            fetchServicesInfo(filteredDocs),
+          ])
         } catch (err: any) {
           console.error("Realtime booking error:", err)
           setError(err?.message || "Realtime update failed.")
@@ -310,59 +310,64 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   }, [searchTerm, statusFilter, bookingTypeFilter, revenueFilter])
 
   const statusColors: Record<string, string> = {
-    Pending: "bg-orange-100 text-orange-800",
-    Accepted: "bg-blue-100 text-blue-800",
+    pending: "bg-orange-100 text-orange-800",
+    accepted: "bg-blue-100 text-blue-800",
     "in progress": "bg-purple-100 text-purple-800",
-    Service_Completed: "bg-green-100 text-green-800",
-    Cancelled: "bg-red-100 text-red-800",
+    service_completed: "bg-green-100 text-green-800",
+    cancelled: "bg-red-100 text-red-800",
     rescheduled: "bg-yellow-100 text-yellow-800",
     default: "bg-gray-100 text-gray-800",
   }
 
+  const resetTableFilters = () => {
+    setSearchTerm("")
+    setStatusFilter("all")
+    setBookingTypeFilter("real")
+    setRevenueFilter("all")
+  }
+
+  const openBooking = (booking: BookingDoc) => {
+    setSelectedBooking(booking)
+    setDetailsOpen(true)
+  }
+
   return (
-    <Card className="overflow-hidden">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-primary" />
-          Booking Management ({filteredBookings.length} bookings)
-        </CardTitle>
-        <CardDescription>Monitor and manage all customer bookings</CardDescription>
+    <Card className="overflow-hidden border-slate-200 shadow-sm">
+      <CardHeader className="gap-4 border-b border-slate-100 bg-white p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-lg text-slate-950"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><Calendar className="h-4 w-4" /></span>Booking directory</CardTitle>
+          <CardDescription className="mt-1">{filteredBookings.length.toLocaleString()} matching booking{filteredBookings.length === 1 ? "" : "s"}</CardDescription>
+        </div>
+        <div className="relative w-full lg:w-96">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input placeholder="Search ID, customer, partner or service" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="bg-slate-50 pl-9" />
+        </div>
       </CardHeader>
 
-      <CardContent>
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-4">
-          <div className="relative w-full sm:w-1/2">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search bookings, customers, or services..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8"
-            />
-          </div>
+      <CardContent className="p-3 sm:p-5">
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3"><p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><Filter className="h-4 w-4" />Filters</p><Button variant="ghost" size="sm" onClick={resetTableFilters} className="h-8 text-xs"><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Reset</Button></div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
 
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-
-            <div className="relative shrink-0">
+            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Booking type</span><div className="relative">
               <select
                 aria-label="Booking type"
                 value={bookingTypeFilter}
                 onChange={(event) => setBookingTypeFilter(event.target.value)}
-                className="border-input bg-background h-9 w-[160px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="h-10 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="real">Real Booking</option>
                 <option value="all">All Bookings</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
-            </div>
+            </div></label>
 
-            <div className="relative shrink-0">
+            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Status</span><div className="relative">
               <select
                 aria-label="Booking status"
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
-                className="border-input bg-background h-9 w-[150px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="h-10 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="all">All Status</option>
                 <option value="pending">Pending</option>
@@ -372,14 +377,14 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
                 <option value="cancelled">Cancelled</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
-            </div>
+            </div></label>
 
-            <div className="relative shrink-0">
+            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Revenue</span><div className="relative">
               <select
                 aria-label="Booking revenue"
                 value={revenueFilter}
                 onChange={(event) => setRevenueFilter(event.target.value)}
-                className="border-input bg-background h-9 w-[170px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="h-10 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="all">All Revenue</option>
                 <option value="issues">Revenue Issues</option>
@@ -387,14 +392,14 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
                 <option value="wallet_equal">Amount = Wallet</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
-            </div>
+            </div></label>
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-md border shadow-sm">
-          <Table className="min-w-[900px] w-full text-sm">
+        <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
+          <Table exportable={false} className="min-w-[1280px] text-sm">
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-slate-50/80">
                 <TableHead>Booking ID</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Services</TableHead>
@@ -476,7 +481,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
                       <TableCell className="whitespace-nowrap">{fmtDate(b.timeSlot)}</TableCell>
 
                       <TableCell>
-                        <Badge className={statusColors[b.status ?? ""] || statusColors.default}>
+                        <Badge className={statusColors[normalize(b.status)] || statusColors.default}>
                           {(b.status ?? "—").replace("_", " ")}
                         </Badge>
                       </TableCell>
@@ -488,16 +493,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
                       </TableCell>
 
                       <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedBooking(b)
-                            setDetailsOpen(true)
-                          }}
-                        >
-                          View
-                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => openBooking(b)}><Eye className="mr-1.5 h-4 w-4" />View details</Button>
                       </TableCell>
                     </TableRow>
                   )
@@ -507,7 +503,21 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
           </Table>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-2">
+        <div className="grid gap-3 md:hidden">
+          {loading ? <div className="flex items-center justify-center gap-2 rounded-xl border py-12 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading bookings...</div> : error ? <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div> : paginatedBookings.length === 0 ? <div className="rounded-xl border border-dashed py-12 text-center text-sm text-slate-500">No bookings found.</div> : paginatedBookings.map((booking) => {
+            const customer = customerMap[booking.customer_id?.path ?? ""] || {}
+            const provider = providerMap[booking.provider_id?.path ?? ""] || {}
+            const services = servicesMap[booking.id] || ["Loading service..."]
+            return <article key={booking.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono text-xs font-semibold text-slate-500">{booking.id}</p><p className="mt-1 truncate font-semibold text-slate-950">{customer.name || "Customer details loading"}</p></div><Badge className={statusColors[normalize(booking.status)] || statusColors.default}>{(booking.status || "Unknown").replace("_", " ")}</Badge></div>
+              <div className="my-4 grid gap-2 text-sm text-slate-600"><p className="truncate font-medium text-slate-800">{services.join(", ")}</p><p className="flex items-center gap-2"><Calendar className="h-4 w-4 text-slate-400" />{fmtDate(booking.date)}</p><p className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-slate-400" />{fmtDate(booking.timeSlot)}</p><p className="flex items-center gap-2"><Phone className="h-4 w-4 text-slate-400" />{customer.phone || "Phone unavailable"}</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-slate-400" /><span className="truncate">{booking.bookingAddress || booking.city || "Address unavailable"}</span></p></div>
+              <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-[11px] text-slate-400">Partner</p><p className="max-w-[150px] truncate text-sm font-medium">{provider.name || "Unassigned"}</p></div><p className="flex items-center font-bold text-slate-950"><IndianRupee className="h-4 w-4" />{amountPaid(booking).toLocaleString()}</p></div>
+              <Button variant="outline" size="sm" onClick={() => openBooking(booking)} className="mt-4 w-full"><Eye className="mr-2 h-4 w-4" />View complete details</Button>
+            </article>
+          })}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-muted-foreground">
             Page {currentPage} of {totalPages || 1}
             {filteredBookings.length > 0 && (

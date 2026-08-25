@@ -125,7 +125,7 @@ export function PnLGraph({
 
   return (
     <Card
-      className={`relative border-l-4 border-gray-300 bg-white shadow-sm transition-transform hover:scale-[1.02] hover:shadow-md ${className}`}
+      className={`relative overflow-hidden border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md ${className}`}
     >
       {loading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 z-50 rounded-md">
@@ -134,7 +134,7 @@ export function PnLGraph({
         </div>
       )}
 
-      <CardHeader>
+      <CardHeader className="border-b border-slate-100 p-4 sm:p-5">
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
@@ -162,7 +162,7 @@ export function PnLGraph({
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="p-3 sm:p-5">
         <div className="h-[340px] w-full">
           {visibleData.length === 0 ? (
             <p className="text-center text-gray-500 mt-10">No data available</p>

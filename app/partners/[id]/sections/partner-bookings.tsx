@@ -508,7 +508,7 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
 
                 <Card><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-purple-100 rounded-lg"><BarChart3 className="w-5 h-5 text-purple-600" /></div><div><p className="text-sm font-medium">Revenue</p><p className="text-2xl font-bold">{formatCurrency(stats.revenue)}</p></div></div></CardContent></Card>
 
-                <Card><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-cyan-100 rounded-lg"><BarChart3 className="w-5 h-5 text-cyan-600" /></div><div><p className="text-sm font-medium">Partner Fare</p><p className="text-2xl font-bold">{formatCurrency(stats.partnerFare)}</p></div></div></CardContent></Card>
+                <Card><CardContent className="p-4"><div className="flex items-center gap-3"><div className="rounded-lg bg-indigo-100 p-2"><BarChart3 className="h-5 w-5 text-indigo-600" /></div><div><p className="text-sm font-medium">Partner Fare</p><p className="text-2xl font-bold">{formatCurrency(stats.partnerFare)}</p></div></div></CardContent></Card>
 
                 {/* ⭐ NEW KPI CARD – TOTAL JOBS */}
                 <Card>

@@ -1,132 +1,28 @@
-"use client";
+"use client"
 
-import React, { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { type LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useState, type ReactNode } from "react"
+import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react"
 
-interface KpiCardProps {
-  title: string;
-  value: string;
-  change: string;
-  trend: "up" | "down";
-  icon: LucideIcon;
-  color: string;
-  description: string;
-  onClickContent?: React.ReactNode; // ✅ click-based content (CAC chart)
+import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
+
+interface KpiCardProps { title: string; value: string; change: string; trend: "up" | "down"; icon: LucideIcon; color: string; description: string; onClickContent?: ReactNode }
+
+const styles: Record<string, { accent: string; icon: string }> = {
+  "text-primary": { accent: "bg-blue-500", icon: "bg-blue-50 text-blue-600" },
+  "text-secondary": { accent: "bg-emerald-500", icon: "bg-emerald-50 text-emerald-600" },
+  "text-chart-3": { accent: "bg-violet-500", icon: "bg-violet-50 text-violet-600" },
+  "text-chart-4": { accent: "bg-orange-500", icon: "bg-orange-50 text-orange-600" },
+  "text-chart-2": { accent: "bg-indigo-500", icon: "bg-indigo-50 text-indigo-600" },
+  "text-green-600": { accent: "bg-green-500", icon: "bg-green-50 text-green-600" },
+  "text-red-600": { accent: "bg-red-500", icon: "bg-red-50 text-red-600" },
 }
 
-export function KpiCard({
-  title,
-  value,
-  change,
-  trend,
-  icon: Icon,
-  color,
-  description,
-  onClickContent,
-}: KpiCardProps) {
-  const [open, setOpen] = useState(false);
+export function KpiCard({ title, value, change, trend, icon: Icon, color, description, onClickContent }: KpiCardProps) {
+  const [open, setOpen] = useState(false)
+  const visual = styles[color] || { accent: "bg-indigo-500", icon: "bg-indigo-50 text-indigo-600" }
+  const content = <Card className={cn("relative h-full overflow-hidden border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md", onClickContent && "cursor-pointer")}><div className={cn("absolute inset-x-0 top-0 h-1", visual.accent)} /><CardContent className="p-4 pt-5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-medium text-slate-500">{title}</p><p className="mt-2 truncate text-2xl font-bold tracking-tight text-slate-950">{value}</p></div><div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", visual.icon)}><Icon className="h-5 w-5" /></div></div><div className="mt-3 flex flex-wrap items-center gap-1.5"><span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold", trend === "up" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700")}>{trend === "up" ? <ArrowUpRight className="mr-0.5 h-3.5 w-3.5" /> : <ArrowDownRight className="mr-0.5 h-3.5 w-3.5" />}{change}</span><span className="text-xs text-slate-400">vs last month</span></div><p className="mt-2 truncate text-xs text-slate-400">{description}</p></CardContent></Card>
 
-  const colorMapping: Record<
-    string,
-    { border: string; bg: string; text: string }
-  > = {
-    "text-primary": {
-      border: "border-blue-500",
-      bg: "bg-blue-50",
-      text: "text-blue-600",
-    },
-    "text-secondary": {
-      border: "border-green-500",
-      bg: "bg-green-50",
-      text: "text-green-600",
-    },
-    "text-chart-3": {
-      border: "border-purple-500",
-      bg: "bg-purple-50",
-      text: "text-purple-600",
-    },
-    "text-chart-4": {
-      border: "border-orange-500",
-      bg: "bg-orange-50",
-      text: "text-orange-600",
-    },
-    "text-chart-2": {
-      border: "border-indigo-500",
-      bg: "bg-indigo-50",
-      text: "text-indigo-600",
-    },
-    default: {
-      border: "border-teal-500",
-      bg: "bg-teal-50",
-      text: "text-teal-600",
-    },
-  };
-
-  const colorStyles = colorMapping[color] || colorMapping.default;
-
-  return (
-    <>
-      {/* KPI CARD */}
-      <div
-        className={cn(onClickContent && "cursor-pointer")}
-        onClick={() => onClickContent && setOpen(true)}
-      >
-        <Card
-          className={cn(
-            "transition-transform hover:scale-[1.02] hover:shadow-md border-l-4 shadow-sm",
-            colorStyles.border,
-            colorStyles.bg
-          )}
-        >
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">{title}</CardTitle>
-              <Icon className={cn("h-4 w-4 opacity-90", color)} />
-            </div>
-          </CardHeader>
-
-          <CardContent>
-            <div className={cn("text-2xl font-bold", colorStyles.text)}>
-              {value}
-            </div>
-
-            <div className="flex items-center space-x-1 text-xs">
-              <span
-                className={trend === "up" ? "text-green-600" : "text-red-600"}
-              >
-                {change}
-              </span>
-              <span className="text-muted-foreground">from last month</span>
-            </div>
-
-            <p className="text-xs text-muted-foreground mt-1">
-              {description}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ✅ CLICK MODAL */}
-      {open && onClickContent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="relative bg-white rounded-xl shadow-xl w-[90vw] max-w-3xl p-4">
-            {/* Close button */}
-            <button
-              className="absolute top-2 right-2 rounded-md px-2 py-1 text-sm text-gray-600 hover:bg-gray-100"
-              onClick={() => setOpen(false)}
-            >
-              ✕
-            </button>
-
-            {/* Content */}
-            <div className="max-h-[70vh] overflow-auto">
-              {onClickContent}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
+  return <>{onClickContent ? <button type="button" onClick={() => setOpen(true)} className="h-full w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">{content}</button> : content}<Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>{onClickContent}</DialogContent></Dialog></>
 }

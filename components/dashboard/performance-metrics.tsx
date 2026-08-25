@@ -88,7 +88,7 @@ export function PerformanceMetrics({
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {/* Peak Hours */}
-      <Card className="border-l-4 border-blue-500 bg-white shadow-sm transition-transform hover:scale-[1.02] hover:shadow-md">
+      <Card className="border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-muted-foreground font-bold">
             <Clock className="h-5 w-5 text-blue-500" /> Slots with Maximum Bookings
@@ -162,7 +162,7 @@ export function PerformanceMetrics({
       </Card>
 
       {/* Top Categories */}
-      <Card className="border-l-4 border-purple-500 bg-white shadow-sm transition-transform hover:scale-[1.02] hover:shadow-md">
+      <Card className="border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-muted-foreground font-bold">
             <Star className="h-5 w-5 text-purple-500" /> Top Categories
@@ -263,7 +263,7 @@ export function PerformanceMetrics({
       </Card>
 
       {/* Customer Insights */}
-      <Card className="border-l-4 border-green-500 bg-white shadow-sm transition-transform hover:scale-[1.02] hover:shadow-md">
+      <Card className="border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-muted-foreground font-bold">
             <TrendingUp className="h-5 w-5 text-green-500" /> Customer Insights

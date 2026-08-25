@@ -4,13 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DollarSign, TrendingUp, TrendingDown, Calendar } from "lucide-react"
-import { AdminSidebar } from "@/components/admin-sidebar"
 import { AdminHeader } from "@/components/admin-header"
 
 export default function RevenueAnalyticsPage() {
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
-      <AdminSidebar />
       <div className="flex flex-col sm:gap-4 sm:py-4">
         <AdminHeader title="Revenue Analytics" />
         <main className="flex-1 space-y-6 p-4 md:p-6">

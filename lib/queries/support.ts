@@ -14,7 +14,10 @@ import {
 } from "firebase/firestore"
 
 import { getFirestoreDb } from "@/lib/firebase"
-import type { SupportTicket } from "@/types/support"
+import type {
+  ComplaintCategory,
+  SupportTicket,
+} from "@/types/support"
 
 // ============================================================
 // TYPES
@@ -296,7 +299,8 @@ function buildSupportTicket(
     id,
 
     customerId:
-      data.customer_id || "",
+      getReferenceId(data.customer_id) ||
+      String(data.customer_id || ""),
 
     customerName:
       customerName ||
@@ -312,11 +316,31 @@ function buildSupportTicket(
       "",
 
     bookingId:
-      data.booking_id || undefined,
+      getReferenceId(
+        data.booking_id ??
+          data.bookingId ??
+          data.booking
+      ) || undefined,
 
     type: mapComplaintType(
       data.customer_complaint
     ),
+
+    category: mapComplaintCategory(
+      [
+        data.customer_complaint,
+        extractDescription(
+          data.complaint_history,
+          ""
+        ),
+      ]
+        .filter(Boolean)
+        .join(" ")
+    ),
+
+    isRepeatedComplaint: false,
+    isDuplicateComplaint: false,
+    relatedComplaintCount: 1,
 
     priority: determinePriority(
       data.complaint_status,
@@ -390,6 +414,79 @@ function extractResolutionNote(
 // SUPPORT TICKETS
 // ============================================================
 
+function markRepeatedComplaints(
+  tickets: SupportTicket[]
+): SupportTicket[] {
+  const getCustomerKey = (ticket: SupportTicket) => {
+    const normalizedName = ticket.customerName.trim().toLowerCase()
+
+    return (
+      ticket.customerId ||
+      ticket.contact_no.replace(/\D/g, "") ||
+      (normalizedName && normalizedName !== "unknown customer"
+        ? normalizedName
+        : `ticket:${ticket.id}`)
+    )
+  }
+
+  const getIssueKey = (ticket: SupportTicket) => {
+    // A booking and issue category identify the same operational case even
+    // when the customer phrases each submission a little differently.
+    if (ticket.bookingId) {
+      return `booking:${ticket.bookingId.toLowerCase()}`
+    }
+
+    const normalizedIssue = (ticket.subject || ticket.description)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+
+    return normalizedIssue || `ticket:${ticket.id}`
+  }
+
+  const complaintGroups = new Map<string, SupportTicket[]>()
+  const getGroupKey = (ticket: SupportTicket) =>
+    [
+      getCustomerKey(ticket),
+      ticket.category,
+      getIssueKey(ticket),
+    ].join("|")
+
+  tickets.forEach((ticket) => {
+    const key = getGroupKey(ticket)
+    complaintGroups.set(key, [
+      ...(complaintGroups.get(key) || []),
+      ticket,
+    ])
+  })
+
+  const primaryTicketIds = new Map<string, string>()
+  complaintGroups.forEach((group, key) => {
+    const primaryTicket = [...group].sort((first, second) => {
+      const firstTime = new Date(first.createdAt).getTime()
+      const secondTime = new Date(second.createdAt).getTime()
+      return firstTime - secondTime || first.id.localeCompare(second.id)
+    })[0]
+
+    if (primaryTicket) primaryTicketIds.set(key, primaryTicket.id)
+  })
+
+  return tickets.map((ticket) => {
+    const groupKey = getGroupKey(ticket)
+    const relatedComplaintCount =
+      complaintGroups.get(groupKey)?.length || 1
+
+    return {
+      ...ticket,
+      isRepeatedComplaint: relatedComplaintCount > 1,
+      isDuplicateComplaint:
+        relatedComplaintCount > 1 &&
+        primaryTicketIds.get(groupKey) !== ticket.id,
+      relatedComplaintCount,
+    }
+  })
+}
+
 /*
   Fast initial request.
 
@@ -419,12 +516,14 @@ export async function getSupportTickets(): Promise<
     const snapshot =
       await getDocs(complaintsQuery)
 
-    return snapshot.docs.map(
-      (documentSnapshot) =>
-        buildSupportTicket(
-          documentSnapshot.id,
-          documentSnapshot.data() as DocumentData
-        )
+    return markRepeatedComplaints(
+      snapshot.docs.map(
+        (documentSnapshot) =>
+          buildSupportTicket(
+            documentSnapshot.id,
+            documentSnapshot.data() as DocumentData
+          )
+      )
     )
   } catch (error) {
     console.error(
@@ -692,6 +791,123 @@ function mapComplaintType(
   }
 
   return "complaint"
+}
+
+function mapComplaintCategory(
+  complaint: string
+): ComplaintCategory {
+  const text = complaint?.toLowerCase() || ""
+  const hasAny = (terms: string[]) =>
+    terms.some((term) => text.includes(term))
+
+  // Keep duplicate charges separate from ordinary payment/refund cases.
+  if (
+    (hasAny(["duplicate", "double", "twice", "multiple"]) &&
+      hasAny([
+        "payment",
+        "paid",
+        "charge",
+        "charged",
+        "debit",
+        "debited",
+        "transaction",
+      ])) ||
+    hasAny([
+      "duplicate payment",
+      "payment twice",
+      "paid twice",
+      "charged twice",
+      "double payment",
+      "double charged",
+      "debited twice",
+      "multiple charge",
+    ])
+  ) {
+    return "duplicate_payment"
+  }
+
+  if (
+    hasAny([
+      "refund",
+      "payment",
+      "charged",
+      "debited",
+      "transaction",
+      "wallet",
+      "money",
+    ])
+  ) {
+    return "payment_refund"
+  }
+
+  if (
+    hasAny([
+      "crash",
+      "technical",
+      "bug",
+      "login",
+      "otp",
+      "website",
+      "app error",
+      "app not working",
+      "not opening",
+    ])
+  ) {
+    return "app_technical"
+  }
+
+  if (
+    hasAny([
+      "provider",
+      "partner",
+      "technician",
+      "professional",
+      "staff",
+      "no show",
+    ])
+  ) {
+    return "provider_related"
+  }
+
+  if (
+    hasAny([
+      "service",
+      "cleaning",
+      "quality",
+      "incomplete",
+      "damage",
+      "work done",
+    ])
+  ) {
+    return "service_related"
+  }
+
+  if (
+    hasAny([
+      "booking",
+      "reschedule",
+      "cancel",
+      "appointment",
+      "time slot",
+      "timeslot",
+    ])
+  ) {
+    return "booking_related"
+  }
+
+  if (
+    hasAny([
+      "account",
+      "profile",
+      "subscription",
+      "membership",
+      "credit",
+    ])
+  ) {
+    return "account_related"
+  }
+
+  return "general"
 }
 
 function mapComplaintStatus(

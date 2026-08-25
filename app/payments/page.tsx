@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { AdminHeader } from "../../components/admin-header";
-import { AdminSidebar } from "../../components/admin-sidebar";
 import PaymentStatsCards from "../../components/payments/payment-stats";
 import PaymentTable from "../../components/payments/payment-table";
 
@@ -133,7 +132,6 @@ export default function PaymentsPage() {
 
   return (
     <div className="flex min-h-screen w-full bg-muted/40">
-      <AdminSidebar />
       <div className="flex flex-1 flex-col">
         <AdminHeader title="Payment Management" />
 

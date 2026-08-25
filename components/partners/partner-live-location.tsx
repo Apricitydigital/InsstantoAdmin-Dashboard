@@ -722,8 +722,8 @@ export function PartnerLiveLocation() {
 
             <div className="flex items-center gap-3">
 
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50">
-                <MapPinned className="h-5 w-5 text-cyan-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
+                <MapPinned className="h-5 w-5 text-indigo-600" />
               </div>
 
               <div>
@@ -774,7 +774,7 @@ export function PartnerLiveLocation() {
                   )
                 }
                 placeholder="Search partner, mobile or city..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-xs text-slate-700 outline-none transition focus:border-cyan-400 focus:bg-white focus:ring-2 focus:ring-cyan-100"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-xs text-slate-700 outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100"
               />
 
             </div>
@@ -862,9 +862,9 @@ export function PartnerLiveLocation() {
 
             <div className="flex items-center gap-3">
 
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-50">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50">
 
-                <Navigation className="h-4 w-4 text-cyan-600" />
+                <Navigation className="h-4 w-4 text-indigo-600" />
 
               </div>
 
@@ -942,7 +942,7 @@ export function PartnerLiveLocation() {
 
                 <div className="text-center">
 
-                  <RefreshCw className="mx-auto h-6 w-6 animate-spin text-cyan-600" />
+                  <RefreshCw className="mx-auto h-6 w-6 animate-spin text-indigo-600" />
 
                   <p className="mt-3 text-xs font-medium text-slate-500">
                     Loading live partner locations...

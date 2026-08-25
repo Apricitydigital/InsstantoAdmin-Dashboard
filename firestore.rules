@@ -134,6 +134,27 @@ service cloud.firestore {
         || hasPermission('customers:write')
         || hasPermission('partners:manage');
     }
+
+    // Partner credit adjustments are managed from the partner details page.
+    // Balance and history writes are committed together in a transaction.
+    match /partner_overall_credits/{docId} {
+      allow read: if canRead('partners:view') || canRead('customers:view');
+      allow write: if isSuperAdmin()
+        || hasPermission('partners:manage')
+        || hasPermission('customers:write');
+    }
+    match /credits_purchase_record/{docId} {
+      allow read: if canRead('partners:view') || canRead('customers:view');
+      allow write: if isSuperAdmin()
+        || hasPermission('partners:manage')
+        || hasPermission('customers:write');
+    }
+    match /chemical_spend_record/{docId} {
+      allow read: if canRead('partners:view') || canRead('customers:view');
+      allow write: if isSuperAdmin()
+        || hasPermission('partners:manage')
+        || hasPermission('customers:write');
+    }
     match /complaints/{docId} {
       allow read: if canRead('complaints:view');
       allow write: if isSuperAdmin() || (canResolveComplaint() && isResolutionOnly());

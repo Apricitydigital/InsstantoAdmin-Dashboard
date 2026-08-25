@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { AdminSidebar } from "@/components/admin-sidebar"
 import { ProtectedRoute } from "@/components/auth/protected-route"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -98,7 +97,6 @@ export default function RoleManagementPage() {
   return (
     <ProtectedRoute roles={["superadmin"]}>
       <div className="flex min-h-screen bg-gray-50">
-        <AdminSidebar />
         <main className="min-w-0 flex-1 space-y-6 p-4 sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>

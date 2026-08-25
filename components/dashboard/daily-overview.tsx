@@ -43,17 +43,17 @@ export function DailyOverviewCard() {
   }, [services, page]);
 
   return (
-    <Card className="relative border-l-4 border-blue-500 bg-white shadow-sm transition-transform hover:scale-[1.02] hover:shadow-md rounded-md">
-      <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-gray-100">
+    <Card className="relative overflow-hidden border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+      <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 p-4 sm:p-5">
         <div className="flex items-center gap-2 text-blue-500">
           <CalendarDays className="h-5 w-5" />
-          <CardTitle className="text-blue-500 text-base font-semibold">
+          <CardTitle className="text-base font-semibold text-slate-900">
             Daily Overview
           </CardTitle>
         </div>
       </CardHeader>
 
-      <CardContent className="pt-4">
+      <CardContent className="p-4 sm:p-5">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-8">
             <Loader2 className="w-6 h-6 text-blue-500 animate-spin mb-2" />

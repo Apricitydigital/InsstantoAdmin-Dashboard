@@ -1,7 +1,8 @@
 // components/customers/subscription-table.tsx
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   collection,
@@ -13,6 +14,7 @@ import {
   getDoc,
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
+import { cacheCustomerNavigationPreview } from "@/lib/customer-navigation-cache"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -61,6 +63,7 @@ export function SubscriptionTable() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "expired">("all")
   const [currentPage, setCurrentPage] = useState(1)
+  const [navigatingCustomerId, setNavigatingCustomerId] = useState<string | null>(null)
 
   // Fetch all subscriptions
   useEffect(() => {
@@ -203,9 +206,15 @@ export function SubscriptionTable() {
     setCurrentPage(1)
   }, [search, statusFilter])
 
+  useEffect(() => {
+    paginatedSubscriptions.forEach((subscription) => {
+      const id = subscription.customerRef?.id || subscription.customerRef?.path?.split("/")[1]
+      if (id) router.prefetch(`/customers/${id}`)
+    })
+  }, [paginatedSubscriptions, router])
+
   // Helper functions
   const fmtDate = (t?: Timestamp) => (t?.toDate ? t.toDate().toLocaleDateString() : "—")
-  const fmtDateTime = (t?: Timestamp) => (t?.toDate ? t.toDate().toLocaleString() : "—")
 
   const getStatusBadge = (status?: string, endDate?: Timestamp) => {
     const isActive = status?.toLowerCase() === "active"
@@ -241,14 +250,14 @@ export function SubscriptionTable() {
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <Card className="overflow-hidden border-slate-200 shadow-sm">
+      <CardHeader className="gap-4 border-b border-slate-100 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
         <CardTitle className="flex items-center gap-2 text-xl">
           <Star className="h-5 w-5 text-yellow-500" />
           Subscribed Customers ({filteredSubscriptions.length} total)
         </CardTitle>
-        <div className="flex gap-2">
-          <div className="relative sm:w-80">
+        <div className="grid w-full gap-2 sm:grid-cols-[minmax(0,1fr)_auto] lg:w-auto">
+          <div className="relative lg:w-80">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search name / email / phone..."
@@ -261,7 +270,7 @@ export function SubscriptionTable() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "expired")}
-              className="border rounded-md px-3 py-2 text-sm"
+              className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -270,7 +279,7 @@ export function SubscriptionTable() {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-3 sm:p-5">
         {search && (
           <div className="mb-4 text-sm text-muted-foreground">
             Showing {filteredSubscriptions.length} results for "{search}"
@@ -285,8 +294,8 @@ export function SubscriptionTable() {
           <div className="text-sm text-red-600 text-center py-8">{error}</div>
         ) : (
           <>
-            <div className="rounded-md border">
-              <Table>
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <Table exportable={false} className="min-w-[1150px]">
                 <TableCaption>Customer subscription records (most recent per customer)</TableCaption>
                 <TableHeader>
                   <TableRow>
@@ -358,14 +367,26 @@ export function SubscriptionTable() {
                           </TableCell>
                           <TableCell>
                             {customerId && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => router.push(`/customers/${customerId}`)}
-                                className="flex items-center gap-2"
-                              >
-                                <Eye className="h-4 w-4" />
-                                View
+                              <Button asChild variant="outline" size="sm">
+                                <Link
+                                  href={`/customers/${customerId}`}
+                                  prefetch
+                                  onPointerEnter={() => router.prefetch(`/customers/${customerId}`)}
+                                  onClick={() => {
+                                    cacheCustomerNavigationPreview({
+                                      id: customerId,
+                                      displayName: customerName,
+                                      email: sub.customerInfo?.email,
+                                      phone,
+                                      photoUrl: sub.customerInfo?.photo_url,
+                                      subscription: sub.Status,
+                                    })
+                                    setNavigatingCustomerId(customerId)
+                                  }}
+                                >
+                                  {navigatingCustomerId === customerId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                                  View details
+                                </Link>
                               </Button>
                             )}
                           </TableCell>

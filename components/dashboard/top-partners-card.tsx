@@ -37,19 +37,19 @@ export function TopPartnersCard() {
   }, [partners, page]);
 
   return (
-    <Card className="relative border-l-4 border-blue-500 bg-white shadow-sm transition-transform hover:scale-[1.02] hover:shadow-md rounded-md">
+    <Card className="relative overflow-hidden border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
       {/* Header */}
-      <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-gray-100">
+      <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 p-4 sm:p-5">
         <div className="flex items-center gap-2 text-blue-500">
           <Users className="h-5 w-5" />
-          <CardTitle className="text-blue-500 text-base font-semibold">
+          <CardTitle className="text-base font-semibold text-slate-900">
             Top Partners
           </CardTitle>
         </div>
       </CardHeader>
 
       {/* Content */}
-      <CardContent className="space-y-4 pt-4">
+      <CardContent className="space-y-4 p-4 sm:p-5">
         {loading && (
           <div className="text-center text-gray-500 py-6">Loading...</div>
         )}

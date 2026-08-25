@@ -102,7 +102,7 @@ const cartQuery = query(
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-lg border flex items-center gap-2">
+      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <Loader2 className="h-5 w-5 animate-spin" />
         <p className="text-sm text-muted-foreground">Loading cart stats...</p>
       </div>
@@ -118,9 +118,9 @@ const cartQuery = query(
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
       {/* Total Cart Records */}
-      <Card>
+      <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
             <ShoppingCart className="h-4 w-4 text-primary" />
@@ -136,7 +136,7 @@ const cartQuery = query(
       </Card>
 
       {/* Total Value */}
-      <Card>
+      <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
             <IndianRupee className="h-4 w-4 text-primary" />
@@ -152,7 +152,7 @@ const cartQuery = query(
       </Card>
 
       {/* Unpaid */}
-      <Card>
+      <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
             <BadgeX className="h-4 w-4 text-yellow-600" />
@@ -168,7 +168,7 @@ const cartQuery = query(
       </Card>
 
       {/* Paid */}
-      <Card>
+      <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
             <BadgeCheck className="h-4 w-4 text-green-600" />
@@ -184,7 +184,7 @@ const cartQuery = query(
       </Card>
 
       {/* Extra: Paid vs Unpaid % */}
-      <Card>
+      <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-muted-foreground">
             Paid Conversion

@@ -256,9 +256,9 @@ export function GraphPlaceholder({
 
   return (
     <Card
-      className={`border-l-4 border-gray-300 bg-white shadow-sm transition-transform hover:scale-[1.02] hover:shadow-md ${className}`}
+      className={`overflow-hidden border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md ${className}`}
     >
-      <CardHeader>
+      <CardHeader className="border-b border-slate-100 p-4 sm:p-5">
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
@@ -294,7 +294,7 @@ export function GraphPlaceholder({
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="p-3 sm:p-5">
         {children || (
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
