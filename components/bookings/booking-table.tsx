@@ -56,6 +56,7 @@ type BookingDoc = {
 
 type PartyInfo = { name?: string; phone?: string }
 type ServiceMap = Record<string, string[]>
+type SortField = "bookingDate" | "timeSlot"
 
 const PAGE_SIZE = 20
 
@@ -65,6 +66,19 @@ const toAmount = (value: unknown) => {
   const amount = Number(value)
   return Number.isFinite(amount) ? amount : 0
 }
+
+const formatStatusLabel = (status: string) =>
+  status
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.toLowerCase() === "otp"
+      ? "OTP"
+      : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ")
+
+const normalizeStatus = (status: unknown) =>
+  (status ?? "").toString().trim().toLowerCase().replace(/[\s-]+/g, "_")
 
 interface BookingTableProps {
   fromDate: string
@@ -84,6 +98,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const [statusFilter, setStatusFilter] = useState("all")
   const [bookingTypeFilter, setBookingTypeFilter] = useState("real")
   const [revenueFilter, setRevenueFilter] = useState("all")
+  const [sortField, setSortField] = useState<SortField>("bookingDate")
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedBooking, setSelectedBooking] = useState<BookingDoc | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -111,17 +126,11 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
             ? new Date(toDate + "T23:59:59")
             : new Date()
 
-          const filteredDocs = docs
-            .filter((b) => {
-              const d = b.date?.toDate?.()
-              if (!d) return false
-              return d >= startDate && d <= endDate
-            })
-            .sort((a, b) => {
-              const da = a.date?.toDate?.() || new Date(0)
-              const dbb = b.date?.toDate?.() || new Date(0)
-              return dbb.getTime() - da.getTime()
-            })
+          const filteredDocs = docs.filter((b) => {
+            const d = b.date?.toDate?.()
+            if (!d) return false
+            return d >= startDate && d <= endDate
+          })
 
           setAllBookings(filteredDocs)
           setLoading(false)
@@ -237,10 +246,25 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
 
   const amountPaid = (b: BookingDoc) => toAmount(b.amount_paid)
 
+  const statusOptions = useMemo(() => {
+    const statuses = new Map<string, string>()
+
+    allBookings.forEach((booking) => {
+      const rawStatus = booking.status?.trim()
+      if (!rawStatus) return
+
+      const value = normalizeStatus(rawStatus)
+      if (!statuses.has(value)) statuses.set(value, formatStatusLabel(rawStatus))
+    })
+
+    return Array.from(statuses, ([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [allBookings])
+
   const filteredBookings = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
 
-    return allBookings.filter((b) => {
+    const matchingBookings = allBookings.filter((b) => {
       const services = servicesMap[b.id]?.join(" ") || ""
       const cust = customerMap[b.customer_id?.path ?? ""] || {}
       const prov = providerMap[b.provider_id?.path ?? ""] || {}
@@ -272,7 +296,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
 
       const matchesSearch = !term || text.includes(term)
       const matchesStatus =
-        statusFilter === "all" || normalize(b.status) === statusFilter
+        statusFilter === "all" || normalizeStatus(b.status) === statusFilter
       const paidAmount = toAmount(b.amount_paid)
       const walletAmount = toAmount(b.walletAmountUsed)
       const netRevenue = paidAmount
@@ -285,6 +309,19 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
 
       return matchesBookingType && matchesSearch && matchesStatus && matchesRevenue
     })
+
+    return matchingBookings.sort((a, b) => {
+      const selectedDateA = sortField === "timeSlot" ? a.timeSlot : a.date
+      const selectedDateB = sortField === "timeSlot" ? b.timeSlot : b.date
+      const selectedTimeA = selectedDateA?.toDate?.()?.getTime() ?? 0
+      const selectedTimeB = selectedDateB?.toDate?.()?.getTime() ?? 0
+
+      if (selectedTimeA !== selectedTimeB) return selectedTimeB - selectedTimeA
+
+      const bookingTimeA = a.date?.toDate?.()?.getTime() ?? 0
+      const bookingTimeB = b.date?.toDate?.()?.getTime() ?? 0
+      return bookingTimeB - bookingTimeA
+    })
   }, [
     allBookings,
     searchTerm,
@@ -294,6 +331,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
     customerMap,
     providerMap,
     servicesMap,
+    sortField,
   ])
 
   const paginatedBookings = useMemo(() => {
@@ -307,12 +345,14 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, bookingTypeFilter, revenueFilter])
+  }, [searchTerm, statusFilter, bookingTypeFilter, revenueFilter, sortField])
 
   const statusColors: Record<string, string> = {
     pending: "bg-orange-100 text-orange-800",
     accepted: "bg-blue-100 text-blue-800",
-    "in progress": "bg-purple-100 text-purple-800",
+    in_progress: "bg-purple-100 text-purple-800",
+    at_location: "bg-indigo-100 text-indigo-800",
+    otp_created: "bg-cyan-100 text-cyan-800",
     service_completed: "bg-green-100 text-green-800",
     cancelled: "bg-red-100 text-red-800",
     rescheduled: "bg-yellow-100 text-yellow-800",
@@ -324,6 +364,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
     setStatusFilter("all")
     setBookingTypeFilter("real")
     setRevenueFilter("all")
+    setSortField("bookingDate")
   }
 
   const openBooking = (booking: BookingDoc) => {
@@ -347,7 +388,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       <CardContent className="p-3 sm:p-5">
         <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
           <div className="mb-2 flex items-center justify-between gap-3"><p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><Filter className="h-4 w-4" />Filters</p><Button variant="ghost" size="sm" onClick={resetTableFilters} className="h-8 text-xs"><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Reset</Button></div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
 
             <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Booking type</span><div className="relative">
               <select
@@ -370,11 +411,9 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
                 className="h-10 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="accepted">Accepted</option>
-                <option value="in progress">In Progress</option>
-                <option value="service_completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
+                {statusOptions.map((status) => (
+                  <option key={status.value} value={status.value}>{status.label}</option>
+                ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
             </div></label>
@@ -390,6 +429,19 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
                 <option value="issues">Revenue Issues</option>
                 <option value="negative">Negative Revenue</option>
                 <option value="wallet_equal">Amount = Wallet</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+            </div></label>
+
+            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Sort by</span><div className="relative">
+              <select
+                aria-label="Sort bookings by"
+                value={sortField}
+                onChange={(event) => setSortField(event.target.value as SortField)}
+                className="h-10 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="bookingDate">Booking Date (Newest First)</option>
+                <option value="timeSlot">Time Slot (Latest First)</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
             </div></label>
@@ -481,7 +533,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
                       <TableCell className="whitespace-nowrap">{fmtDate(b.timeSlot)}</TableCell>
 
                       <TableCell>
-                        <Badge className={statusColors[normalize(b.status)] || statusColors.default}>
+                        <Badge className={statusColors[normalizeStatus(b.status)] || statusColors.default}>
                           {(b.status ?? "—").replace("_", " ")}
                         </Badge>
                       </TableCell>
@@ -509,7 +561,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
             const provider = providerMap[booking.provider_id?.path ?? ""] || {}
             const services = servicesMap[booking.id] || ["Loading service..."]
             return <article key={booking.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono text-xs font-semibold text-slate-500">{booking.id}</p><p className="mt-1 truncate font-semibold text-slate-950">{customer.name || "Customer details loading"}</p></div><Badge className={statusColors[normalize(booking.status)] || statusColors.default}>{(booking.status || "Unknown").replace("_", " ")}</Badge></div>
+              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono text-xs font-semibold text-slate-500">{booking.id}</p><p className="mt-1 truncate font-semibold text-slate-950">{customer.name || "Customer details loading"}</p></div><Badge className={statusColors[normalizeStatus(booking.status)] || statusColors.default}>{booking.status ? formatStatusLabel(booking.status) : "Unknown"}</Badge></div>
               <div className="my-4 grid gap-2 text-sm text-slate-600"><p className="truncate font-medium text-slate-800">{services.join(", ")}</p><p className="flex items-center gap-2"><Calendar className="h-4 w-4 text-slate-400" />{fmtDate(booking.date)}</p><p className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-slate-400" />{fmtDate(booking.timeSlot)}</p><p className="flex items-center gap-2"><Phone className="h-4 w-4 text-slate-400" />{customer.phone || "Phone unavailable"}</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-slate-400" /><span className="truncate">{booking.bookingAddress || booking.city || "Address unavailable"}</span></p></div>
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-[11px] text-slate-400">Partner</p><p className="max-w-[150px] truncate text-sm font-medium">{provider.name || "Unassigned"}</p></div><p className="flex items-center font-bold text-slate-950"><IndianRupee className="h-4 w-4" />{amountPaid(booking).toLocaleString()}</p></div>
               <Button variant="outline" size="sm" onClick={() => openBooking(booking)} className="mt-4 w-full"><Eye className="mr-2 h-4 w-4" />View complete details</Button>
