@@ -51,6 +51,7 @@ import {
 } from "lucide-react"
 
 import {
+  addTicketAdminNote,
   getPartnerReviews,
   getSupportTickets,
   hydrateSupportTicketCustomerNames,
@@ -216,8 +217,9 @@ function getStatusLabel(
 // ============================================================
 
 export default function SupportPage() {
-  const { hasPermission } = useAuth()
-  const canEdit = hasPermission("complaints:write")
+  const { user } = useAuth()
+  const canManageComplaints = user?.role === "superadmin"
+  const canAddComplaintNote = canManageComplaints || user?.role === "admin"
   // ----------------------------------------------------------
   // FILTER STATES
   // ----------------------------------------------------------
@@ -881,21 +883,29 @@ export default function SupportPage() {
   // COMPLETE COMPLAINT
   // ==========================================================
 
-  const handleCompleteComplaint =
+  const handleSubmitComplaintAction =
     useCallback(async () => {
-      if (!canEdit || !selectedTicket) {
+      if (
+        !selectedTicket ||
+        (!canManageComplaints && !canAddComplaintNote) ||
+        (!canManageComplaints && !completionNote.trim())
+      ) {
         return
       }
 
       setUpdatingTicket(true)
 
       try {
-        const success =
-          await updateTicketStatus(
-            selectedTicket.id,
-            "resolved",
-            completionNote
-          )
+        const success = canManageComplaints
+          ? await updateTicketStatus(
+              selectedTicket.id,
+              "resolved",
+              completionNote
+            )
+          : await addTicketAdminNote(
+              selectedTicket.id,
+              completionNote
+            )
 
         if (!success) {
           return
@@ -916,20 +926,20 @@ export default function SupportPage() {
               (ticket) =>
                 ticket.id ===
                 selectedTicket.id
-                  ? {
-                      ...ticket,
-                      status:
-                        "resolved",
-                      updatedAt:
+                  ? canManageComplaints
+                    ? {
+                        ...ticket,
+                        status: "resolved",
+                        updatedAt: resolvedAt,
                         resolvedAt,
-                      resolvedAt,
-                      note:
-                        completionNote.trim() ||
-                        ticket.note,
-                      resolutionNote:
-                        completionNote.trim() ||
-                        undefined,
-                    }
+                        note: completionNote.trim() || ticket.note,
+                        resolutionNote: completionNote.trim() || undefined,
+                      }
+                    : {
+                        ...ticket,
+                        updatedAt: resolvedAt,
+                        note: completionNote.trim(),
+                      }
                   : ticket
             )
         )
@@ -945,7 +955,8 @@ export default function SupportPage() {
         setUpdatingTicket(false)
       }
     }, [
-      canEdit,
+      canAddComplaintNote,
+      canManageComplaints,
       completionNote,
       selectedTicket,
     ])
@@ -1522,35 +1533,41 @@ export default function SupportPage() {
                               </TableCell>
 
                               <TableCell className="text-right">
-                                {ticket.status !== "resolved" ? (
-                                  canEdit ? (
-                                  <Button
-                                    size="sm"
-                                    className="bg-green-600 hover:bg-green-700"
-                                    onClick={() =>
-                                      setSelectedTicket(
-                                        ticket
-                                      )
-                                    }
-                                  >
-                                    Complete
-                                  </Button>
-                                  ) : (
+                                <div className="flex justify-end gap-2">
+                                  {ticket.status !== "resolved" && canManageComplaints && (
+                                    <Button
+                                      size="sm"
+                                      className="bg-green-600 hover:bg-green-700"
+                                      onClick={() => setSelectedTicket(ticket)}
+                                    >
+                                      Complete
+                                    </Button>
+                                  )}
+                                  {canAddComplaintNote && !canManageComplaints && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setSelectedTicket(ticket)}
+                                    >
+                                      Add note
+                                    </Button>
+                                  )}
+                                  {ticket.status === "resolved" && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setResolutionTicket(ticket)}
+                                      className="border-green-200 text-green-700 hover:bg-green-50"
+                                    >
+                                      View Resolution
+                                    </Button>
+                                  )}
+                                  {!canManageComplaints && !canAddComplaintNote && ticket.status !== "resolved" && (
                                     <span className="text-sm text-gray-400">View only</span>
-                                  )
-                                ) : (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() =>
-                                      setResolutionTicket(ticket)
-                                    }
-                                    className="border-green-200 text-green-700 hover:bg-green-50"
-                                  >
-                                    View Resolution
-                                  </Button>
-                                )}
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           )
@@ -1808,7 +1825,7 @@ export default function SupportPage() {
                               </TableCell>
 
                               <TableCell className="text-right">
-                                {canEdit && (
+                                {canManageComplaints && (
                                   <Button variant="outline" size="sm">
                                     Moderate
                                   </Button>
@@ -1910,7 +1927,7 @@ export default function SupportPage() {
           COMPLETE COMPLAINT MODAL
       ==================================================== */}
 
-      {canEdit && selectedTicket && (
+      {canAddComplaintNote && selectedTicket && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onMouseDown={(
@@ -1933,14 +1950,13 @@ export default function SupportPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Complete Complaint
+                  {canManageComplaints ? "Complete Complaint" : "Add Admin Note"}
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-600">
-                  Add a customer care
-                  note before marking
-                  this complaint as
-                  resolved.
+                  {canManageComplaints
+                    ? "Add a customer care note before marking this complaint as resolved."
+                    : "Add an internal admin note without changing the complaint status."}
                 </p>
               </div>
 
@@ -2019,11 +2035,9 @@ export default function SupportPage() {
 
               <Button
                 type="button"
-                disabled={
-                  updatingTicket
-                }
+                disabled={updatingTicket || (!canManageComplaints && !completionNote.trim())}
                 onClick={() =>
-                  void handleCompleteComplaint()
+                  void handleSubmitComplaintAction()
                 }
                 className="bg-green-600 hover:bg-green-700"
               >
@@ -2032,8 +2046,8 @@ export default function SupportPage() {
                 )}
 
                 {updatingTicket
-                  ? "Completing..."
-                  : "Submit"}
+                  ? canManageComplaints ? "Completing..." : "Saving..."
+                  : canManageComplaints ? "Complete Complaint" : "Add Note"}
               </Button>
             </div>
           </div>

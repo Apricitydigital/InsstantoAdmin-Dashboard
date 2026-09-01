@@ -93,8 +93,8 @@ const getReferenceId = (value: unknown) => {
 
 export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps) {
   const db = getFirestoreDb()
-  const { hasPermission, user } = useAuth()
-  const canManageCredits = hasPermission("partners:manage")
+  const { user } = useAuth()
+  const canManageCredits = user?.role === "superadmin"
 
   const [creditAccount, setCreditAccount] = useState<CreditAccount>({
     exists: false,

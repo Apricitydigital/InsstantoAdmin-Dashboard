@@ -130,6 +130,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPermission = (permission: string): boolean => {
     if (!user) return false
     if (user.role === "superadmin") return true
+    if (permission === "complaints:write") {
+      return user.role === "admin" && user.permissions.includes(permission)
+    }
+    if (permission.endsWith(":write") || permission.endsWith(":manage")) return false
     return user.permissions.includes(permission)
   }
 

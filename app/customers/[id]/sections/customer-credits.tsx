@@ -85,8 +85,8 @@ interface CustomerCreditsTabProps {
 
 export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
   const db = getFirestoreDb()
-  const { hasPermission, user } = useAuth()
-  const canManageCredits = hasPermission("customers:write")
+  const { user } = useAuth()
+  const canManageCredits = user?.role === "superadmin"
   
   const [walletInfo, setWalletInfo] = useState<WalletDoc | null>(null)
   const [purchaseRecords, setPurchaseRecords] = useState<CreditPurchaseRecord[]>([])

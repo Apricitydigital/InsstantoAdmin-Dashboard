@@ -29,6 +29,39 @@ type CustomerDoc = {
 type BookingDoc = { id: string; status?: string; amount_paid?: number }
 type WalletDoc = { id: string; credit_balance?: number }
 
+function formatCustomerAddress(value: unknown): string {
+  if (typeof value === "string" && value.trim()) return value.trim()
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "Not provided"
+
+  const address = value as Record<string, unknown>
+  const completeAddress = [
+    address.formatted_address,
+    address.formattedAddress,
+    address.full_address,
+    address.fullAddress,
+    address.address,
+    address.label,
+  ].find((part) => typeof part === "string" && part.trim())
+
+  if (typeof completeAddress === "string") return completeAddress.trim()
+
+  const addressParts = [
+    address.house_number,
+    address.houseNumber,
+    address.street,
+    address.area,
+    address.landmark,
+    address.city,
+    address.state,
+    address.pincode,
+    address.postalCode,
+  ].filter((part): part is string | number =>
+    (typeof part === "string" && Boolean(part.trim())) || typeof part === "number"
+  )
+
+  return addressParts.length > 0 ? addressParts.join(", ") : "Not provided"
+}
+
 export default function CustomerDetailsPage() {
   const params = useParams()
   const router = useRouter()
@@ -128,7 +161,7 @@ export default function CustomerDetailsPage() {
   const displayName = customer?.display_name || customer?.customer_name || "Unknown customer"
   const initials = displayName.split(/\s+/).slice(0, 2).map((name) => name[0]).join("").toUpperCase() || "CU"
   const phone = customer?.phone_number || (customer?.contact_no ? String(customer.contact_no) : "Not provided")
-  const address = typeof customer?.address === "string" ? customer.address : customer?.address?.address || customer?.address?.formatted_address || "Not provided"
+  const address = formatCustomerAddress(customer?.address)
   const completedBookings = bookings.filter((booking) => ["completed", "service_completed"].includes(booking.status?.toLowerCase() || ""))
   const totalSpent = completedBookings.reduce((total, booking) => total + (booking.amount_paid || 0), 0)
 
@@ -205,7 +238,7 @@ export default function CustomerDetailsPage() {
             ].map((item) => (
               <div key={item.label} className={`flex min-w-0 items-start gap-3 rounded-xl border border-white/80 bg-white/80 p-3 shadow-sm ${item.wide ? "sm:col-span-2" : ""}`}>
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500"><item.icon className="h-4 w-4" /></div>
-                <div className="min-w-0"><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.label}</p><p className="mt-0.5 truncate text-sm font-medium text-slate-700" title={item.value}>{item.value}</p></div>
+                <div className="min-w-0"><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.label}</p><p className={`mt-0.5 text-sm font-medium text-slate-700 ${item.wide ? "whitespace-normal break-words leading-5" : "truncate"}`} title={item.value}>{item.value}</p></div>
               </div>
             ))}
           </div>

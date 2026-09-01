@@ -700,6 +700,32 @@ export async function updateTicketStatus(
   }
 }
 
+export async function addTicketAdminNote(
+  ticketId: string,
+  note: string
+): Promise<boolean> {
+  const trimmedNote = note.trim()
+  if (!trimmedNote) return false
+
+  try {
+    const db = getFirestoreDb()
+    await updateDoc(
+      doc(db, "customer_complain", ticketId),
+      {
+        complaint_history: arrayUnion({
+          message: trimmedNote,
+          timestamp: Timestamp.now(),
+          type: "admin_note",
+        }),
+      }
+    )
+    return true
+  } catch (error) {
+    console.error("Error adding complaint admin note:", error)
+    return false
+  }
+}
+
 // ============================================================
 // SUPPORT TICKET HELPERS
 // ============================================================
