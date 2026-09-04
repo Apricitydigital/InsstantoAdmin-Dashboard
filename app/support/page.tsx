@@ -63,7 +63,7 @@ import type {
   ComplaintCategory,
   SupportTicket,
 } from "@/types/support"
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
+import { getOnboardedPartnerIds } from "@/lib/queries/partners"
 import { useAuth } from "@/lib/auth"
 
 // ============================================================
@@ -498,10 +498,9 @@ export default function SupportPage() {
         setReviewsLoading(true)
 
         try {
-          const reviewData =
-            await getPartnerReviews(
-              PROVIDER_ID_LIST
-            )
+          const reviewData = await getPartnerReviews(
+            await getOnboardedPartnerIds()
+          )
 
           if (
             !mountedRef.current ||

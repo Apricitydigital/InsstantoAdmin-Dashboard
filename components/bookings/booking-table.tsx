@@ -3,11 +3,11 @@
 import { useEffect, useState, useMemo } from "react"
 import {
   collection,
-  getDoc,
   getDocs,
   onSnapshot,
   query,
   where,
+  documentId,
   Timestamp,
   DocumentReference,
   DocumentData,
@@ -36,7 +36,7 @@ import { Loader2, Phone, Calendar, Search, Filter, ChevronDown, Eye, MapPin, Clo
 import { DetailsSheet } from "@/components/bookings/booking-component"
 
 // ✅ import from partner.ts
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
+import { getOnboardedPartnerIdSet } from "@/lib/queries/partners"
 
 // ---------- Types ----------
 type BookingDoc = {
@@ -59,6 +59,7 @@ type ServiceMap = Record<string, string[]>
 type SortField = "bookingDate" | "timeSlot"
 
 const PAGE_SIZE = 20
+const FIRESTORE_IN_LIMIT = 30
 
 const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
 
@@ -80,6 +81,41 @@ const formatStatusLabel = (status: string) =>
 const normalizeStatus = (status: unknown) =>
   (status ?? "").toString().trim().toLowerCase().replace(/[\s-]+/g, "_")
 
+const chunkArray = <T,>(values: T[], size = FIRESTORE_IN_LIMIT) =>
+  Array.from({ length: Math.ceil(values.length / size) }, (_, index) =>
+    values.slice(index * size, (index + 1) * size)
+  )
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  worker: (value: T) => Promise<R>,
+  concurrency = 3
+): Promise<R[]> {
+  const results = new Array<R>(values.length)
+  let nextIndex = 0
+
+  const runners = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex++
+        results[index] = await worker(values[index])
+      }
+    }
+  )
+
+  await Promise.all(runners)
+  return results
+}
+
+const referenceKey = (value: unknown) => {
+  if (typeof value === "string") return value
+  if (value && typeof value === "object" && "path" in value) {
+    return String((value as { path: unknown }).path)
+  }
+  return ""
+}
+
 interface BookingTableProps {
   fromDate: string
   toDate: string
@@ -92,6 +128,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const [customerMap, setCustomerMap] = useState<Record<string, PartyInfo>>({})
   const [providerMap, setProviderMap] = useState<Record<string, PartyInfo>>({})
   const [servicesMap, setServicesMap] = useState<ServiceMap>({})
+  const [onboardedPartnerIds, setOnboardedPartnerIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>("")
   const [searchTerm, setSearchTerm] = useState("")
@@ -106,52 +143,66 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   useEffect(() => {
     setLoading(true)
     setError("")
+    let active = true
+    let unsubscribe = () => {}
 
-    const bookingsQuery = query(collection(db, "bookings"))
+    const start = fromDate
+      ? new Date(`${fromDate}T00:00:00`)
+      : new Date(2025, 3, 1)
+    const end = toDate
+      ? new Date(`${toDate}T23:59:59.999`)
+      : new Date()
 
-    const unsub = onSnapshot(
-      bookingsQuery,
-      async (snapshot) => {
-        try {
-          const docs: BookingDoc[] = snapshot.docs.map((d) => ({
-            id: d.id,
-            ...(d.data() as any),
-          }))
+    getOnboardedPartnerIdSet(db)
+      .then((partnerIds) => {
+        if (!active) return
+        setOnboardedPartnerIds(partnerIds)
 
-          const startDate = fromDate
-            ? new Date(fromDate + "T00:00:00")
-            : new Date(2025, 3, 1)
+        const bookingsQuery = query(
+          collection(db, "bookings"),
+          where("date", ">=", Timestamp.fromDate(start)),
+          where("date", "<=", Timestamp.fromDate(end))
+        )
 
-          const endDate = toDate
-            ? new Date(toDate + "T23:59:59")
-            : new Date()
+        unsubscribe = onSnapshot(
+          bookingsQuery,
+          async (snapshot) => {
+            try {
+              const docs: BookingDoc[] = snapshot.docs.map((booking) => ({
+                id: booking.id,
+                ...(booking.data() as Omit<BookingDoc, "id">),
+              }))
 
-          const filteredDocs = docs.filter((b) => {
-            const d = b.date?.toDate?.()
-            if (!d) return false
-            return d >= startDate && d <= endDate
-          })
-
-          setAllBookings(filteredDocs)
-          setLoading(false)
-          await Promise.all([
-            hydrateParties(filteredDocs),
-            fetchServicesInfo(filteredDocs),
-          ])
-        } catch (err: any) {
-          console.error("Realtime booking error:", err)
-          setError(err?.message || "Realtime update failed.")
-          setLoading(false)
-        }
-      },
-      (err) => {
-        console.error("Booking listener failed:", err)
-        setError(err?.message || "Realtime listener failed.")
+              if (!active) return
+              setAllBookings(docs)
+              setLoading(false)
+              await Promise.allSettled([hydrateParties(docs), fetchServicesInfo(docs)])
+            } catch (err: any) {
+              if (!active) return
+              console.error("Realtime booking error:", err)
+              setError(err?.message || "Realtime update failed.")
+              setLoading(false)
+            }
+          },
+          (err) => {
+            if (!active) return
+            console.error("Booking listener failed:", err)
+            setError(err?.message || "Realtime listener failed.")
+            setLoading(false)
+          }
+        )
+      })
+      .catch((err: any) => {
+        if (!active) return
+        console.error("Partner filter failed:", err)
+        setError(err?.message || "Failed to load onboarded partners.")
         setLoading(false)
-      }
-    )
+      })
 
-    return () => unsub()
+    return () => {
+      active = false
+      unsubscribe()
+    }
   }, [db, fromDate, toDate])
 
   const hydrateParties = async (docs: BookingDoc[]) => {
@@ -161,28 +212,31 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
     const unique = (arr: DocumentReference<DocumentData>[]) =>
       Array.from(new Map(arr.map((r) => [r.path, r])).values())
 
-    const [custSnaps, provSnaps] = await Promise.all([
-      Promise.all(unique(refs("customer_id")).map((r) => getDoc(r))),
-      Promise.all(unique(refs("provider_id")).map((r) => getDoc(r))),
-    ])
+    const customerRefs = unique(refs("customer_id"))
+    const providerRefs = unique(refs("provider_id"))
+    const allRefs = unique([...customerRefs, ...providerRefs])
+    const snapshots = await mapWithConcurrency(
+      chunkArray(allRefs.map((ref) => ref.id)),
+      (ids) => getDocs(
+        query(collection(db, "customer"), where(documentId(), "in", ids))
+      )
+    )
 
-    const newCust: Record<string, PartyInfo> = {}
-    custSnaps.forEach((s) => {
-      const d = s.data() as any
-      newCust[s.ref.path] = {
-        name: d?.customer_name || d?.display_name,
-        phone: d?.phone_number,
+    const partyByPath: Record<string, PartyInfo> = {}
+    snapshots.forEach((snapshot) => snapshot.forEach((customer) => {
+      const data = customer.data()
+      partyByPath[customer.ref.path] = {
+        name: data.customer_name || data.display_name,
+        phone: data.phone_number,
       }
-    })
+    }))
 
-    const newProv: Record<string, PartyInfo> = {}
-    provSnaps.forEach((s) => {
-      const d = s.data() as any
-      newProv[s.ref.path] = {
-        name: d?.customer_name || d?.display_name,
-        phone: d?.phone_number,
-      }
-    })
+    const newCust = Object.fromEntries(
+      customerRefs.map((ref) => [ref.path, partyByPath[ref.path] || {}])
+    )
+    const newProv = Object.fromEntries(
+      providerRefs.map((ref) => [ref.path, partyByPath[ref.path] || {}])
+    )
 
     setCustomerMap((prev) => ({ ...prev, ...newCust }))
     setProviderMap((prev) => ({ ...prev, ...newProv }))
@@ -192,43 +246,41 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
     try {
       const servicesInfo: ServiceMap = {}
 
-      await Promise.all(
-        bookingDocs.map(async (booking) => {
-          const serviceNames: string[] = []
-
-          const cartRefs = Array.isArray(booking.subCategoryCart_id)
+      const uniqueCartRefs = Array.from(new Map(
+        bookingDocs.flatMap((booking) => {
+          const refs = Array.isArray(booking.subCategoryCart_id)
             ? booking.subCategoryCart_id
-            : booking.subCategoryCart_id
-              ? [booking.subCategoryCart_id]
-              : []
+            : booking.subCategoryCart_id ? [booking.subCategoryCart_id] : []
+          return refs.map((ref: unknown) => [referenceKey(ref), ref] as const)
+        }).filter(([key]) => Boolean(key))
+      ).values())
 
-          for (const subCategoryRef of cartRefs) {
-            try {
-              const cartQuery = query(
-                collection(db, "cart"),
-                where("subCategoryCartId", "==", subCategoryRef)
-              )
-
-              const cartSnapshot = await getDocs(cartQuery)
-
-              cartSnapshot.forEach((cartDoc) => {
-                const cartData = cartDoc.data()
-                const serviceName =
-                  cartData.service_name ||
-                  cartData.serviceName ||
-                  "Unknown Service"
-
-                serviceNames.push(serviceName)
-              })
-            } catch (err) {
-              console.warn("Error querying cart collection:", err)
-            }
-          }
-
-          servicesInfo[booking.id] =
-            serviceNames.length > 0 ? serviceNames : ["Unknown Service"]
-        })
+      const cartSnapshots = await mapWithConcurrency(
+        chunkArray(uniqueCartRefs),
+        (refs) => getDocs(
+          query(collection(db, "cart"), where("subCategoryCartId", "in", refs))
+        )
       )
+
+      const namesByCartRef = new Map<string, string[]>()
+      cartSnapshots.forEach((snapshot) => snapshot.forEach((cartDocument) => {
+        const data = cartDocument.data()
+        const key = referenceKey(data.subCategoryCartId)
+        if (!key) return
+        const names = namesByCartRef.get(key) || []
+        names.push(data.service_name || data.serviceName || "Unknown Service")
+        namesByCartRef.set(key, names)
+      }))
+
+      bookingDocs.forEach((booking) => {
+        const refs = Array.isArray(booking.subCategoryCart_id)
+          ? booking.subCategoryCart_id
+          : booking.subCategoryCart_id ? [booking.subCategoryCart_id] : []
+        const names = refs.flatMap((ref: unknown) =>
+          namesByCartRef.get(referenceKey(ref)) || []
+        )
+        servicesInfo[booking.id] = names.length > 0 ? names : ["Unknown Service"]
+      })
 
       setServicesMap((prev) => ({ ...prev, ...servicesInfo }))
     } catch (error) {
@@ -274,7 +326,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
 
       const isRealBooking =
         !!providerId &&
-        PROVIDER_ID_LIST.includes(providerId as any) &&
+        onboardedPartnerIds.has(providerId) &&
         customerId !== INTERNAL_CUSTOMER_ID
 
       const matchesBookingType =
@@ -332,6 +384,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
     providerMap,
     servicesMap,
     sortField,
+    onboardedPartnerIds,
   ])
 
   const paginatedBookings = useMemo(() => {

@@ -38,7 +38,6 @@
 // } from "@/components/ui/dropdown-menu"
 
 // import { Search, Eye, Download } from "lucide-react"
-// import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
 
 // /* ------------------------------------------------------------------ */
 // /* CONSTANTS */
@@ -224,7 +223,6 @@
 
 //       const matchesPartnerIds =
 //         partnerIdFilter === "all" ||
-//         PROVIDER_ID_LIST.includes(p.id as typeof PROVIDER_ID_LIST[number])
 
 //       const matchesStatus =
 //         statusFilter === "All" || p.status === statusFilter
@@ -433,14 +431,18 @@ import Link from "next/link"
 
 import {
   collection,
+  doc,
   getDocs,
   onSnapshot,
   query,
+  updateDoc,
   where,
   Timestamp,
 } from "firebase/firestore"
 
 import { getFirestoreDb } from "@/lib/firebase"
+import { useAuth } from "@/lib/auth"
+import { useToast } from "@/hooks/use-toast"
 
 import {
   Card,
@@ -486,7 +488,7 @@ import {
   Loader2,
 } from "lucide-react"
 
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
+import { ONBOARDED_PARTNER_STATUS } from "@/lib/queries/partners"
 
 /* ============================================================
    CONSTANTS
@@ -503,6 +505,7 @@ const STATUS_OPTIONS = [
 ] as const
 
 type StatusFilter = (typeof STATUS_OPTIONS)[number]
+type PartnerStatus = Exclude<StatusFilter, "All">
 
 /* ============================================================
    TYPES
@@ -564,6 +567,8 @@ export function PartnerTable({
   toDate,
 }: PartnerTableProps) {
   const db = getFirestoreDb()
+  const { user } = useAuth()
+  const { toast } = useToast()
 
   const [partners, setPartners] = useState<Partner[]>([])
 
@@ -585,6 +590,41 @@ export function PartnerTable({
     useState<StatusFilter>("All")
 
   const [loading, setLoading] = useState(false)
+  const [updatingPartnerId, setUpdatingPartnerId] = useState<string | null>(null)
+
+  const canChangePartnerStatus = user?.role === "superadmin"
+
+  const updatePartnerStatus = async (
+    partner: Partner,
+    status: PartnerStatus
+  ) => {
+    if (!canChangePartnerStatus || partner.status === status) return
+
+    setUpdatingPartnerId(partner.id)
+
+    try {
+      await updateDoc(doc(db, "customer", partner.id), {
+        partner_status: status,
+      })
+
+      toast({
+        title: "Partner status updated",
+        description: `${partner.display_name} is now ${formatStatus(status)}.`,
+      })
+    } catch (error) {
+      console.error("Failed to update partner status:", error)
+      toast({
+        title: "Could not update status",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingPartnerId(null)
+    }
+  }
 
   /* ==========================================================
      DATE RANGE
@@ -853,10 +893,7 @@ export function PartnerTable({
           const matchesPartnerIds =
             partnerIdFilter ===
               "all" ||
-            PROVIDER_ID_LIST.includes(
-              partner.id as
-                (typeof PROVIDER_ID_LIST)[number]
-            )
+            partner.status === ONBOARDED_PARTNER_STATUS
 
           const matchesStatus =
             statusFilter ===
@@ -1557,33 +1594,75 @@ export function PartnerTable({
                       ========================================= */}
 
                       <TableCell>
-
-                        <Badge
-                          variant="outline"
-                          className={
-                            isOnboarded
-                              ? "rounded-full border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700"
-                              : isUnverified
-                                ? "rounded-full border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-600"
-                                : "rounded-full border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700"
-                          }
-                        >
-
-                          <span
+                        {canChangePartnerStatus ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                disabled={updatingPartnerId === partner.id}
+                                title="Change partner status"
+                                className={
+                                  isOnboarded
+                                    ? "h-8 rounded-full border-emerald-200 bg-emerald-50 px-2.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                                    : isUnverified
+                                      ? "h-8 rounded-full border-rose-200 bg-rose-50 px-2.5 text-[10px] font-semibold text-rose-600 hover:bg-rose-100"
+                                      : "h-8 rounded-full border-amber-200 bg-amber-50 px-2.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
+                                }
+                              >
+                                {updatingPartnerId === partner.id ? (
+                                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                                ) : (
+                                  <span
+                                    className={
+                                      isOnboarded
+                                        ? "mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500"
+                                        : isUnverified
+                                          ? "mr-1.5 h-1.5 w-1.5 rounded-full bg-rose-500"
+                                          : "mr-1.5 h-1.5 w-1.5 rounded-full bg-amber-500"
+                                    }
+                                  />
+                                )}
+                                {formatStatus(partner.status)}
+                                <ChevronDown className="ml-1.5 h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="min-w-[210px]">
+                              {STATUS_OPTIONS.filter(
+                                (status): status is PartnerStatus => status !== "All"
+                              ).map((status) => (
+                                <DropdownMenuItem
+                                  key={status}
+                                  disabled={partner.status === status}
+                                  onClick={() => updatePartnerStatus(partner, status)}
+                                >
+                                  {formatStatus(status)}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : (
+                          <Badge
+                            variant="outline"
                             className={
                               isOnboarded
-                                ? "mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500"
+                                ? "rounded-full border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700"
                                 : isUnverified
-                                  ? "mr-1.5 h-1.5 w-1.5 rounded-full bg-rose-500"
-                                  : "mr-1.5 h-1.5 w-1.5 rounded-full bg-amber-500"
+                                  ? "rounded-full border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-600"
+                                  : "rounded-full border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700"
                             }
-                          />
-
-                          {formatStatus(
-                            partner.status
-                          )}
-
-                        </Badge>
+                          >
+                            <span
+                              className={
+                                isOnboarded
+                                  ? "mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500"
+                                  : isUnverified
+                                    ? "mr-1.5 h-1.5 w-1.5 rounded-full bg-rose-500"
+                                    : "mr-1.5 h-1.5 w-1.5 rounded-full bg-amber-500"
+                              }
+                            />
+                            {formatStatus(partner.status)}
+                          </Badge>
+                        )}
 
                       </TableCell>
 

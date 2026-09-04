@@ -1,5 +1,5 @@
 import { getFirestoreDb } from "@/lib/firebase";
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
+import { getOnboardedPartnerIdSet } from "@/lib/queries/partners";
 import {
   collection,
   getDocs,
@@ -72,8 +72,7 @@ export async function fetchTopServices(
     const q = query(baseQuery, ...filters);
     const snapshot = await getDocs(q);
 
-    // Use only first 3 providers for service filtering
-    const allowedProviders = PROVIDER_ID_LIST.slice(0, 3);
+    const allowedProviders = await getOnboardedPartnerIdSet(db);
 
     const bookingsBySubCat: Record<string, number> = {};
     const subCategoryRefs: Set<string> = new Set();
@@ -82,7 +81,7 @@ export async function fetchTopServices(
     for (const docSnap of snapshot.docs) {
       const booking = docSnap.data();
       const providerId = booking.provider_id?.id || booking.provider_id;
-      if (!allowedProviders.includes(providerId)) continue;
+      if (!allowedProviders.has(providerId)) continue;
 
       const subCatRef: DocumentReference<DocumentData> | undefined =
         booking.subCategoryCart_id;
@@ -149,7 +148,7 @@ export async function fetchTopCategories(
 ): Promise<TopCategory[]> {
   try {
     const db = getFirestoreDb();
-    const allowedProviders = PROVIDER_ID_LIST;
+    const allowedProviders = await getOnboardedPartnerIdSet(db);
 
     const filters: any[] = [where("status", "==", "Service_Completed")];
 
@@ -172,7 +171,7 @@ export async function fetchTopCategories(
         const customerId = b.customer_id?.id || b.customer_id;
 
         return (
-          allowedProviders.includes(providerId) &&
+          allowedProviders.has(providerId) &&
           customerId !== INTERNAL_CUSTOMER_ID
         );
       });

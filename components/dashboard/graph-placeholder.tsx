@@ -19,10 +19,10 @@ import {
   ResponsiveContainer,
   LabelList,
 } from "recharts"
-import { collection, query, where, getDocs, doc, Timestamp } from "firebase/firestore"
+import { collection, query, where, getDocs, Timestamp } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
+import { getOnboardedPartnerIdSet } from "@/lib/queries/partners"
 
 interface GraphPlaceholderProps {
   title: string
@@ -60,7 +60,7 @@ export function GraphPlaceholder({
   const fetchRevenueData = async (offset: number) => {
     const db = getFirestoreDb()
 
-    const providerRefs = PROVIDER_ID_LIST.map((id) => doc(db, "customer", id))
+    const onboardedPartnerIds = await getOnboardedPartnerIdSet(db)
 
     const now = new Date()
     const monthBuckets = Array.from({ length: 6 }, (_, i) => {
@@ -89,7 +89,6 @@ export function GraphPlaceholder({
 
     const q = query(
       bookingsRef,
-      where("provider_id", "in", providerRefs),
       where("date", ">=", Timestamp.fromDate(monthBuckets[0].start)),
       where(
         "date",
@@ -110,6 +109,8 @@ export function GraphPlaceholder({
 
     snap.forEach((docSnap) => {
       const b = docSnap.data() as any
+      const providerId = b?.provider_id?.id || b?.provider_id
+      if (!onboardedPartnerIds.has(providerId)) return
       if (b?.status !== "Service_Completed") return
       if (b?.customer_id?.id === INTERNAL_CUSTOMER_ID) return
 

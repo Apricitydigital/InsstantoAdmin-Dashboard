@@ -12,7 +12,7 @@ import {
   QueryConstraint,
 } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
+import { getOnboardedPartnerIds } from "@/lib/queries/partners";
 
 export interface CustomerStats {
   totalCustomers: number;
@@ -136,7 +136,7 @@ export async function fetchNewVsRepeatCustomers(
   let totalRating = 0;
   let ratingCount = 0;
 
-  const partnerIdChunks = chunkArray(PROVIDER_ID_LIST, 10);
+  const partnerIdChunks = chunkArray(await getOnboardedPartnerIds(db), 30);
 
   for (const chunk of partnerIdChunks) {
     const partnerRefs = chunk.map((id) => doc(db, "customer", id));

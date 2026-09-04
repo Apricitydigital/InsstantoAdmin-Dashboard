@@ -2,10 +2,10 @@ import React, { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { LucideIcon, ChevronLeft, ChevronRight } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from "recharts"
-import { doc, collection, query, where, getDocs, Timestamp } from "firebase/firestore"
+import { collection, query, where, getDocs, Timestamp } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
+import { getOnboardedPartnerIdSet } from "@/lib/queries/partners"
 
 interface ChartPlaceholderProps {
   title: string
@@ -39,7 +39,7 @@ export function ChartPlaceholder({
 
   const fetchBookingsData = async (offset: number) => {
     const db = getFirestoreDb()
-    const customerRefs = PROVIDER_ID_LIST.map((id) => doc(db, "customer", id))
+    const onboardedPartnerIds = await getOnboardedPartnerIdSet(db)
 
     const currentDate = new Date()
     // Generate 6 months starting from offset
@@ -73,7 +73,6 @@ export function ChartPlaceholder({
     const bookingsCol = collection(db, "bookings")
     const bookingsQuery = query(
       bookingsCol,
-      where("provider_id", "in", customerRefs),
       where("status", "==", "Service_Completed"),
       where("date", ">=", Timestamp.fromDate(rangeStart)),
       where("date", "<=", Timestamp.fromDate(rangeEnd))
@@ -88,6 +87,8 @@ export function ChartPlaceholder({
 
     snapshot.forEach((bookingDocument) => {
       const data = bookingDocument.data()
+      const providerId = data.provider_id?.id || data.provider_id
+      if (!onboardedPartnerIds.has(providerId)) return
       if (data.customer_id?.id === INTERNAL_CUSTOMER_ID) return
 
       const bookingDate = data.date?.toDate?.()

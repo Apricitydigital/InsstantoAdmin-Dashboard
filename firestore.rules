@@ -154,6 +154,12 @@ service cloud.firestore {
       allow read: if canRead('partners:view') || canRead('customers:view');
       allow write: if isSuperAdmin();
     }
+    // Loan records are visible with partner access, but only superadmins can
+    // create or manage a partner's current loan from the partner details page.
+    match /PartnerKitLoan/{docId} {
+      allow read: if canRead('partners:view');
+      allow write: if isSuperAdmin();
+    }
     match /complaints/{docId} {
       allow read: if canRead('complaints:view');
       allow create, delete: if isSuperAdmin();

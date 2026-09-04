@@ -6,12 +6,11 @@ import {
     query,
     where,
     Timestamp,
-    doc as docRef,
     DocumentReference,
     getDoc,
 } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
+import { getOnboardedPartnerIdSet } from "@/lib/queries/partners";
 import Papa from "papaparse";
 import { getPnLData } from "@/lib/queries/getPnLdata"
 
@@ -206,9 +205,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     /* ------------------------------
        PROVIDER FILTERS
     ------------------------------ */
-    const providerIds = PROVIDER_ID_LIST;
-
-    const providerRefs = providerIds.map((id) => docRef(db, "customer", id));
+    const onboardedPartnerIds = await getOnboardedPartnerIdSet(db);
 
     const bookingsCol = collection(db, "bookings");
     const customersCol = collection(db, "customer");
@@ -219,38 +216,35 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     const bookingSnap = await getDocs(
         query(
             bookingsCol,
-            where("provider_id", "in", providerRefs),
             where("date", ">=", fromTS),
             where("date", "<=", toTS)
         )
     );
 
-    const totalBookings = bookingSnap.size;
+    const bookingDocs = bookingSnap.docs.filter((bookingDocument) => {
+        const provider = bookingDocument.data().provider_id;
+        return onboardedPartnerIds.has(provider?.id || provider);
+    });
+    const totalBookings = bookingDocs.length;
 
     /* ------------------------------
        BOOKINGS — STATUS
     ------------------------------ */
-    async function countStatus(status: string) {
-        return await getDocs(
-            query(
-                bookingsCol,
-                where("provider_id", "in", providerRefs),
-                where("status", "==", status),
-                where("date", ">=", fromTS),
-                where("date", "<=", toTS)
-            )
+    function bookingsWithStatus(status: string) {
+        return bookingDocs.filter(
+            (bookingDocument) => bookingDocument.data().status === status
         );
     }
 
-    const pendingSnap = await countStatus("Pending");
-    const confirmedSnap = await countStatus("Accepted");
-    const completedSnap = await countStatus("Service_Completed");
-    const cancelledSnap = await countStatus("Booking_Cancelled");
+    const pendingSnap = bookingsWithStatus("Pending");
+    const confirmedSnap = bookingsWithStatus("Accepted");
+    const completedSnap = bookingsWithStatus("Service_Completed");
+    const cancelledSnap = bookingsWithStatus("Booking_Cancelled");
 
-    const pendingBookings = pendingSnap.size;
-    const confirmedBookings = confirmedSnap.size;
-    const completedBookings = completedSnap.size;
-    const cancelledBookings = cancelledSnap.size;
+    const pendingBookings = pendingSnap.length;
+    const confirmedBookings = confirmedSnap.length;
+    const completedBookings = completedSnap.length;
+    const cancelledBookings = cancelledSnap.length;
 
     /* ------------------------------
        REVENUE CALCULATION (completed only)
@@ -404,7 +398,6 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     const prevCompletedSnap = await getDocs(
         query(
             bookingsCol,
-            where("provider_id", "in", providerRefs),
             where("status", "==", "Service_Completed"),
             where("date", ">=", prevFromTS),
             where("date", "<=", prevToTS)
@@ -414,6 +407,8 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     const prevCompletedDocs: Array<{ customer_id?: DocumentReference | null }> = [];
     prevCompletedSnap.forEach((snapDoc) => {
         const d = snapDoc.data() as any;
+        const providerId = d.provider_id?.id || d.provider_id;
+        if (!onboardedPartnerIds.has(providerId)) return;
         prevCompletedDocs.push({ customer_id: d.customer_id ?? null });
     });
 
@@ -480,8 +475,7 @@ export async function fetchCategoryWiseBookings(
     const fromTS = Timestamp.fromDate(from);
     const toTS = Timestamp.fromDate(to);
 
-    const providerIds = PROVIDER_ID_LIST;
-    const providerRefs = providerIds.map((id) => docRef(db, "customer", id));
+    const onboardedPartnerIds = await getOnboardedPartnerIdSet(db);
 
     const bookingsCol = collection(db, "bookings");
 
@@ -489,7 +483,6 @@ export async function fetchCategoryWiseBookings(
     const completedSnap = await getDocs(
         query(
             bookingsCol,
-            where("provider_id", "in", providerRefs),
             where("status", "==", "Service_Completed"),
             where("date", ">=", fromTS),
             where("date", "<=", toTS)
@@ -506,6 +499,8 @@ export async function fetchCategoryWiseBookings(
     // Count bookings by category
     for (const docSnap of completedSnap.docs) {
         const booking = docSnap.data() as any;
+        const providerId = booking.provider_id?.id || booking.provider_id;
+        if (!onboardedPartnerIds.has(providerId)) continue;
         const customerId = booking.customer_id?.id || booking.customer_id;
 
         if (customerId === "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2") {

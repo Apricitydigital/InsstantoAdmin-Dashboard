@@ -44,20 +44,19 @@ export function MarketingMetrics() {
           return
         }
         
-        const { collection, query, where, Timestamp, onSnapshot, doc: docRef } = await import("firebase/firestore")
-        const { PROVIDER_ID_LIST } = await import("@/lib/queries/partners")
+        const { collection, query, where, Timestamp, onSnapshot } = await import("firebase/firestore")
+        const { getOnboardedPartnerIdSet } = await import("@/lib/queries/partners")
         
         const fromTS = Timestamp.fromDate(new Date(today + "T00:00:00"))
         const toTS = Timestamp.fromDate(new Date(today + "T23:59:59"))
         
         // Set up real-time listener for completed bookings (amount paid)
         const bookingsCol = collection(db, "bookings")
-        const providerRefs = PROVIDER_ID_LIST.map((id: string) => docRef(db, "customer", id))
+        const onboardedPartnerIds = await getOnboardedPartnerIdSet(db)
         
         const completedBookingsUnsubscribe = onSnapshot(
           query(
             bookingsCol,
-            where("provider_id", "in", providerRefs),
             // where("status", "==", "Service_Completed"),
             where("date", ">=", fromTS),
             where("date", "<=", toTS)
@@ -73,8 +72,10 @@ export function MarketingMetrics() {
             console.log(`Total bookings found: ${completedSnap.size}`)
             
             completedSnap.forEach((snapDoc) => {
-              bookingIndex++
               const d = snapDoc.data() as any
+              const providerId = d.provider_id?.id || d.provider_id
+              if (!onboardedPartnerIds.has(providerId)) return
+              bookingIndex++
               const amount = d.amount_paid || 0
               totalPaid += amount
               completedCount++
@@ -161,7 +162,11 @@ export function MarketingMetrics() {
             where("date", "<=", toTS)
           ),
           (cancelledSnap) => {
-            setCancelledBookings(cancelledSnap.size)
+            const cancelledCount = cancelledSnap.docs.filter((booking) => {
+              const provider = booking.data().provider_id
+              return onboardedPartnerIds.has(provider?.id || provider)
+            }).length
+            setCancelledBookings(cancelledCount)
           },
           (error) => {
             console.error("Error listening to cancelled bookings:", error)
@@ -211,7 +216,6 @@ export function MarketingMetrics() {
             const bookingsSnap = await getDocs(
               query(
                 collection(db, "bookings"),
-                where("provider_id", "in", providerRefs),
                 where("status", "==", "Service_Completed"),
                 where("date", ">=", fromTS),
                 where("date", "<=", toTS)
@@ -221,6 +225,8 @@ export function MarketingMetrics() {
             // Count bookings per customer
             bookingsSnap.forEach((docSnap: any) => {
               const d = docSnap.data() as any
+              const providerId = d.provider_id?.id || d.provider_id
+              if (!onboardedPartnerIds.has(providerId)) return
               const customerId = d.customer_id || d.customer
               if (customerId) {
                 customerBookingsMap[customerId] = (customerBookingsMap[customerId] || 0) + 1

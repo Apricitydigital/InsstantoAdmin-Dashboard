@@ -15,7 +15,7 @@ import {
 } from "firebase/firestore"
 
 import { getFirestoreDb } from "@/lib/firebase"
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
+import { getOnboardedPartnerIdSet } from "@/lib/queries/partners"
 import Papa from "papaparse"
 
 // ============================================================
@@ -96,7 +96,6 @@ type DateRange = {
 // CONSTANTS
 // ============================================================
 
-const MAX_FIRESTORE_IN_VALUES = 30
 const CACHE_DURATION_MS = 5 * 60 * 1000
 const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
 
@@ -190,28 +189,6 @@ function roundNumber(
         multiplier
     ) / multiplier
   )
-}
-
-function chunkArray<T>(
-  values: T[],
-  chunkSize: number
-): T[][] {
-  const chunks: T[][] = []
-
-  for (
-    let index = 0;
-    index < values.length;
-    index += chunkSize
-  ) {
-    chunks.push(
-      values.slice(
-        index,
-        index + chunkSize
-      )
-    )
-  }
-
-  return chunks
 }
 
 function monthKey(date: Date): string {
@@ -339,13 +316,13 @@ function createPreviousDateRange(
 // ============================================================
 
 async function fetchBookingsForRange(
-  providerReferences: DocumentReference[],
+  onboardedPartnerIds: Set<string>,
   range: DateRange
 ): Promise<
   QueryDocumentSnapshot<DocumentData>[]
 > {
   if (
-    providerReferences.length === 0
+    onboardedPartnerIds.size === 0
   ) {
     return []
   }
@@ -355,67 +332,19 @@ async function fetchBookingsForRange(
   const bookingsCollection =
     collection(db, "bookings")
 
-  /*
-    Firestore supports a limited number of values in an "in" query.
-    Splitting provider references keeps the query safe when more partners
-    are added.
-  */
-  const providerChunks = chunkArray(
-    providerReferences,
-    MAX_FIRESTORE_IN_VALUES
+  const snapshot = await getDocs(
+    query(
+      bookingsCollection,
+      where("date", ">=", range.fromTimestamp),
+      where("date", "<=", range.toTimestamp)
+    )
   )
 
-  const snapshots =
-    await Promise.all(
-      providerChunks.map(
-        (providerChunk) =>
-          getDocs(
-            query(
-              bookingsCollection,
-
-              where(
-                "provider_id",
-                "in",
-                providerChunk
-              ),
-
-              where(
-                "date",
-                ">=",
-                range.fromTimestamp
-              ),
-
-              where(
-                "date",
-                "<=",
-                range.toTimestamp
-              )
-            )
-          )
-      )
-    )
-
-  /*
-    A map protects against accidental duplicates when provider input
-    contains repeated IDs.
-  */
-  const uniqueDocuments = new Map<
-    string,
-    QueryDocumentSnapshot<DocumentData>
-  >()
-
-  for (const snapshot of snapshots) {
-    for (const bookingDocument of snapshot.docs) {
-      uniqueDocuments.set(
-        bookingDocument.id,
-        bookingDocument
-      )
-    }
-  }
-
-  return [
-    ...uniqueDocuments.values(),
-  ]
+  return snapshot.docs.filter((bookingDocument) => {
+    const provider = bookingDocument.data().provider_id
+    const providerId = provider?.id ?? provider
+    return typeof providerId === "string" && onboardedPartnerIds.has(providerId)
+  })
 }
 
 async function fetchCustomerCount(
@@ -997,23 +926,7 @@ export async function fetchBookingStats(
       currentRange
     )
 
-  const uniqueProviderIds = [
-    ...new Set(
-      PROVIDER_ID_LIST.filter(
-        Boolean
-      )
-    ),
-  ]
-
-  const providerReferences =
-    uniqueProviderIds.map(
-      (providerId) =>
-        doc(
-          db,
-          "customer",
-          providerId
-        )
-    )
+  const onboardedPartnerIds = await getOnboardedPartnerIdSet(db)
 
   /*
     These requests do not depend on one another, so they run together.
@@ -1029,12 +942,12 @@ export async function fetchBookingStats(
     pnlRows,
   ] = await Promise.all([
     fetchBookingsForRange(
-      providerReferences,
+      onboardedPartnerIds,
       currentRange
     ),
 
     fetchBookingsForRange(
-      providerReferences,
+      onboardedPartnerIds,
       previousRange
     ),
 
@@ -1556,27 +1469,11 @@ export async function fetchCategoryWiseBookings(
     toDate
   )
 
-  const uniqueProviderIds = [
-    ...new Set(
-      PROVIDER_ID_LIST.filter(
-        Boolean
-      )
-    ),
-  ]
-
-  const providerReferences =
-    uniqueProviderIds.map(
-      (providerId) =>
-        doc(
-          db,
-          "customer",
-          providerId
-        )
-    )
+  const onboardedPartnerIds = await getOnboardedPartnerIdSet(db)
 
   const bookingDocuments =
     await fetchBookingsForRange(
-      providerReferences,
+      onboardedPartnerIds,
       range
     )
 

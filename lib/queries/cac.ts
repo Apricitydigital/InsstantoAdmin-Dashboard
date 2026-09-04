@@ -6,12 +6,11 @@ import {
   query,
   where,
   Timestamp,
-  doc as docRef,
   DocumentReference,
 } from "firebase/firestore";
 import Papa from "papaparse";
 import { getFirestoreDb } from "@/lib/firebase";
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners";
+import { getOnboardedPartnerIdSet } from "@/lib/queries/partners";
 
 /* ------------------------------------------------------------------ */
 /* TYPES */
@@ -187,14 +186,11 @@ export async function fetchCACMonthlyPoints(
      2️⃣ BOOKINGS (FIRESTORE)
   ------------------------------ */
 
-  const providerRefs = PROVIDER_ID_LIST.slice(0, 8).map(id =>
-    docRef(db, "customer", id)
-  );
+  const onboardedPartnerIds = await getOnboardedPartnerIdSet(db);
 
   const completedSnap = await getDocs(
     query(
       collection(db, "bookings"),
-      where("provider_id", "in", providerRefs),
       where("status", "==", "Service_Completed"),
       where("date", ">=", fromTS),
       where("date", "<=", toTS)
@@ -207,9 +203,11 @@ export async function fetchCACMonthlyPoints(
     const d = docSnap.data() as {
       date?: Timestamp;
       customer_id?: DocumentReference;
+      provider_id?: DocumentReference;
     };
 
-    if (!d.date || !d.customer_id?.id) return;
+    if (!d.date || !d.customer_id?.id || !d.provider_id?.id) return;
+    if (!onboardedPartnerIds.has(d.provider_id.id)) return;
 
     const mk = monthKey(d.date.toDate());
     countsByMonth[mk] ||= {};

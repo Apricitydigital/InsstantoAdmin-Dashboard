@@ -7,7 +7,7 @@ import {
     Timestamp
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
-import { PROVIDER_ID_LIST } from "@/lib/queries/partners"
+import { getOnboardedPartnerIds } from "@/lib/queries/partners"
 
 const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
 
@@ -26,7 +26,8 @@ export type BookingStats = {
 
 export async function fetchBookingStats(fromDate?: string, toDate?: string): Promise<BookingStats> {
     const db = getFirestoreDb()
-    const customerRefs = PROVIDER_ID_LIST.map(id => doc(db, "customer", id))
+    const onboardedPartnerIds = await getOnboardedPartnerIds(db)
+    const onboardedPartnerIdSet = new Set(onboardedPartnerIds)
     const bookingsCol = collection(db, "bookings")
     const reviewsCol = collection(db, "reviews")
 
@@ -56,7 +57,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
             const customerId = booking.customer_id?.id
 
             return !!providerId &&
-                PROVIDER_ID_LIST.includes(providerId as any) &&
+                onboardedPartnerIdSet.has(providerId) &&
                 customerId !== INTERNAL_CUSTOMER_ID
         })
 
@@ -79,8 +80,16 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
 
     // Apply the selected range to ratings as well. Older review records may use
     // `timestamp` or `date` instead of `createdAt`, so filter them client-side.
-    const reviewsQuery = query(reviewsCol, where("partnerId", "in", customerRefs))
-    const reviewSnap = await getDocs(reviewsQuery)
+    const reviewSnapshots = await Promise.all(
+        Array.from(
+            { length: Math.ceil(onboardedPartnerIds.length / 30) },
+            (_, index) => onboardedPartnerIds.slice(index * 30, (index + 1) * 30)
+        ).map(ids => getDocs(query(reviewsCol, where(
+                "partnerId",
+                "in",
+                ids.map(id => doc(db, "customer", id))
+            ))))
+    )
 
     const ratingStart = fromDate ? new Date(`${fromDate}T00:00:00`) : null
     const ratingEnd = toDate ? new Date(`${toDate}T23:59:59.999`) : null
@@ -104,7 +113,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
 
     let totalRating = 0
     let ratingCount = 0
-    reviewSnap.forEach(review => {
+    reviewSnapshots.forEach(snapshot => snapshot.forEach(review => {
         const data = review.data() as {
             partnerRating?: number
             createdAt?: unknown
@@ -120,7 +129,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
             totalRating += data.partnerRating
             ratingCount++
         }
-    })
+    }))
 
     const averageRating = ratingCount > 0 ? totalRating / ratingCount : 0
     const completionRate = total > 0 ? (completed / total) * 100 : 0
