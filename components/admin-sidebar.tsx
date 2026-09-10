@@ -18,6 +18,7 @@ const navigation = [
   { name: "Bookings", href: "/bookings", icon: Calendar, permissions: ["bookings:view"] },
   { name: "Payments", href: "/payments", icon: CreditCard, permissions: ["payments:view"] },
   { name: "Coupons & offers", href: "/coupons", icon: Ticket, permissions: ["coupons:view"] },
+  { name: "Slot Availability Issues", href: "/slot-availability", icon: Calendar, permissions: ["analytics:view"] },
   { name: "Services & coverage", href: "/services", icon: Wrench, permissions: ["services:view"] },
   { name: "Complaints & support", href: "/support", icon: MessageSquare, permissions: ["complaints:view"] },
   { name: "AI data assistant", href: "/chatbot", icon: Bot, permissions: ["chatbot:view"] },

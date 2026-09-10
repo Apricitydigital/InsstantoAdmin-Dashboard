@@ -82,6 +82,30 @@ service cloud.firestore {
         && addedNote.type == 'admin_note';
     }
 
+    // Anonymous telemetry is append-only, including for superadmins.
+    match /slot_unavailability_events/{eventId} {
+      allow read: if canRead('analytics:view');
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'eventType', 'eventVersion', 'createdAt', 'clientCreatedAt', 'source',
+          'subCategoryId', 'serviceCoverageCityId', 'serviceCoverageCategoryId',
+          'serviceHubId', 'reasonCode', 'daysSearched', 'platform', 'diagnostics'
+        ])
+        && request.resource.data.eventType == 'slots_unavailable'
+        && request.resource.data.eventVersion == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.clientCreatedAt is timestamp
+        && request.resource.data.source in ['checkout_regular', 'checkout_monthly', 'reschedule']
+        && request.resource.data.subCategoryId is string
+        && request.resource.data.serviceCoverageCityId is string
+        && request.resource.data.serviceCoverageCategoryId is string
+        && request.resource.data.serviceHubId is string
+        && request.resource.data.reasonCode is string
+        && request.resource.data.daysSearched == 7
+        && request.resource.data.platform is string
+        && request.resource.data.diagnostics is map;
+      allow update, delete: if false;
+    }
     // Customers and admins can read coverage. Only superadmins may change it.
     match /service_coverage/{cityId} {
       allow read: if signedIn();
@@ -194,9 +218,9 @@ service cloud.firestore {
 
     // Admin and superadmin can read every dashboard collection. Only the
     // superadmin role receives dashboard-wide mutation rights.
-    match /{document=**} {
+    match /{collectionName}/{document=**} {
       allow read: if canViewDashboard() || hasPermission('analytics:view');
-      allow write: if isSuperAdmin();
+      allow write: if collectionName != 'slot_unavailability_events' && isSuperAdmin();
     }
   }
 }

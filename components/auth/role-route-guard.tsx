@@ -21,6 +21,7 @@ export function RoleRouteGuard({ children }: { children: React.ReactNode }) {
     ["/bookings", ["bookings:view"]],
     ["/payments", ["payments:view"]],
     ["/coupons", ["coupons:view"]],
+    ["/slot-availability", ["analytics:view"]],
     ["/services", ["services:view"]],
     ["/support", ["complaints:view"]],
     ["/chatbot", ["chatbot:view"]],
