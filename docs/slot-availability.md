@@ -2,7 +2,7 @@
 
 Open `/slot-availability` from the sidebar. Access uses the existing `analytics:view` permission (included for built-in admins and superadmins).
 
-The page reads anonymous `slot_unavailability_events` occurrences. These are not unique customers and cannot be used to contact customers. It performs no event, booking, schedule, partner, payment, or coverage writes.
+The page reads `slot_unavailability_events` occurrences. These count attempts, not unique customers. It resolves `customer_id` (a reference to `customer/{uid}`), falling back to `customerUid`, and displays the customer name, phone, email, and UID. Customer lookups share the document-path cache. Missing or inaccessible customer records do not prevent events from loading; legacy events without identity remain supported. Profile links use the existing customer-details permission. It performs no event, booking, schedule, partner, payment, or coverage writes.
 
 The default period is the last seven calendar days including today, in the browser's timezone. Firestore queries use `createdAt >= start` and `createdAt < midnight after end`, ordered newest first. Reads use 100-document cursor batches. The entire range is read before showing summaries, so totals never represent an incomplete first page. Details paginate at 100 events per page. Large ranges will require proportionally more reads, time, and browser memory; narrow the range when needed.
 
@@ -14,7 +14,7 @@ Display names use an in-memory document-path promise cache scoped to the mounted
 
 Deploy the dashboard through the project's normal process. The active rules file is root `firestore.rules`, as configured in `firebase.json`; `firebase/firestore.rules` is not used by that configuration.
 
-The root rules add contract-validated creates for signed-in customer apps, analytics-authorized admin reads, and deny event updates/deletes. The existing broad superadmin write rule excludes this collection so it cannot override the append-only restriction. Deploy the rules using the existing Firebase project selection:
+The root rules add contract-validated creates (optional customer references and UIDs must identify the signed-in customer) for signed-in customer apps, analytics-authorized admin reads, and deny event updates/deletes. The existing broad superadmin write rule excludes this collection so it cannot override the append-only restriction. Deploy the rules using the existing Firebase project selection:
 
 ```sh
 firebase deploy --only firestore:rules

@@ -1049,7 +1049,11 @@ const generateAISummary = async () => {
                     />
                   </TabsContent>
                   <TabsContent value="credits" className="mt-6">
-                    <PartnerCreditsSection partnerId={partnerId} />
+                    <PartnerCreditsSection
+                      partnerId={partnerId}
+                      fromDate={fromDate}
+                      toDate={toDate}
+                    />
                   </TabsContent>
                   <TabsContent value="attendance" className="mt-6">
                     <PartnerAttendance

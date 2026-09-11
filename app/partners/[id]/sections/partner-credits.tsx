@@ -72,6 +72,8 @@ type AdjustmentType = "add" | "deduct"
 
 interface PartnerCreditsSectionProps {
   partnerId: string
+  fromDate?: string
+  toDate?: string
 }
 
 const ROWS_PER_PAGE = 8
@@ -91,7 +93,11 @@ const getReferenceId = (value: unknown) => {
   return ""
 }
 
-export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps) {
+export function PartnerCreditsSection({
+  partnerId,
+  fromDate = "",
+  toDate = "",
+}: PartnerCreditsSectionProps) {
   const db = getFirestoreDb()
   const { user } = useAuth()
   const canManageCredits = user?.role === "superadmin"
@@ -137,7 +143,7 @@ export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps)
           ),
           getDocs(
             query(
-              collection(db, "chemical_spend_record"),
+              collection(db, "credits_spend_record"),
               where("partnerId", "==", partnerReference)
             )
           ),
@@ -201,7 +207,7 @@ export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps)
           const data = snapshot.data()
           return {
             id: snapshot.id,
-            credits: toAmount(data.credits_spent ?? data.chemical_spend),
+            credits: toAmount(data.credits_spent),
             date: data.spend_date,
             note:
               typeof data.note === "string"
@@ -222,6 +228,8 @@ export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps)
 
       setPurchaseHistory(purchases)
       setSpendHistory(spends)
+      setPurchasePage(1)
+      setSpendPage(1)
     } catch (loadError) {
       console.error("Error fetching partner credits:", loadError)
       setError("Unable to load partner credit information.")
@@ -233,6 +241,10 @@ export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps)
   useEffect(() => {
     void loadCreditsData()
   }, [loadCreditsData])
+
+  useEffect(() => {
+    setSpendPage(1)
+  }, [fromDate, toDate])
 
   const createCreditAccount = async () => {
     if (!canManageCredits || !partnerId) return
@@ -317,7 +329,7 @@ export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps)
           db,
           adjustmentType === "add"
             ? "credits_purchase_record"
-            : "chemical_spend_record"
+            : "credits_spend_record"
         )
       )
 
@@ -377,7 +389,6 @@ export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps)
           transaction.set(historyReference, {
             partnerId: partnerReference,
             credits_spent: amount,
-            chemical_spend: amount,
             spend_date: now,
             bookingId: null,
             ...auditFields,
@@ -430,20 +441,34 @@ export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps)
     () => purchaseHistory.reduce((sum, record) => sum + record.credits, 0),
     [purchaseHistory]
   )
+  const filteredSpendHistory = useMemo(() => {
+    if (!fromDate || !toDate) return spendHistory
+
+    const rangeStart = new Date(`${fromDate}T00:00:00`).getTime()
+    const rangeEnd = new Date(`${toDate}T23:59:59.999`).getTime()
+
+    return spendHistory.filter((record) => {
+      const spendTime = record.date?.toDate?.().getTime()
+      return spendTime !== undefined && spendTime >= rangeStart && spendTime <= rangeEnd
+    })
+  }, [fromDate, spendHistory, toDate])
   const totalCreditsSpent = useMemo(
-    () => spendHistory.reduce((sum, record) => sum + record.credits, 0),
-    [spendHistory]
+    () => filteredSpendHistory.reduce((sum, record) => sum + record.credits, 0),
+    [filteredSpendHistory]
   )
   const purchasePages = Math.max(
     1,
     Math.ceil(purchaseHistory.length / ROWS_PER_PAGE)
   )
-  const spendPages = Math.max(1, Math.ceil(spendHistory.length / ROWS_PER_PAGE))
+  const spendPages = Math.max(
+    1,
+    Math.ceil(filteredSpendHistory.length / ROWS_PER_PAGE)
+  )
   const currentPurchases = purchaseHistory.slice(
     (purchasePage - 1) * ROWS_PER_PAGE,
     purchasePage * ROWS_PER_PAGE
   )
-  const currentSpends = spendHistory.slice(
+  const currentSpends = filteredSpendHistory.slice(
     (spendPage - 1) * ROWS_PER_PAGE,
     spendPage * ROWS_PER_PAGE
   )
@@ -601,7 +626,7 @@ export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps)
                 <TrendingUp className="size-4" /> Purchases ({purchaseHistory.length})
               </TabsTrigger>
               <TabsTrigger value="spends">
-                <TrendingDown className="size-4" /> Spends ({spendHistory.length})
+                <TrendingDown className="size-4" /> Spends ({filteredSpendHistory.length})
               </TabsTrigger>
             </TabsList>
 
@@ -645,7 +670,7 @@ export function PartnerCreditsSection({ partnerId }: PartnerCreditsSectionProps)
             </TabsContent>
 
             <TabsContent value="spends" className="mt-4 space-y-4">
-              {spendHistory.length === 0 ? (
+              {filteredSpendHistory.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">
                   <TrendingDown className="mx-auto mb-4 size-12 opacity-50" />
                   No credit spends found.

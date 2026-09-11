@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, startAfter, Timestamp, where, type DocumentData, type QueryDocumentSnapshot } from "firebase/firestore"
+import { collection, DocumentReference, doc, getDoc, getDocs, limit, orderBy, query, startAfter, Timestamp, where, type DocumentData, type QueryDocumentSnapshot } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 
 export const REASONS: Record<string, string> = {
@@ -22,6 +22,7 @@ export const DIAGNOSTICS: Record<string, string> = {
   showSlotsDisabled: "Slots administratively disabled",
 }
 export interface SlotUnavailabilityEvent {
+  customerUid: string; customerPath: string; customerName: string; customerPhone: string; customerEmail: string; customerStatus: string
   id: string; eventType: string; eventVersion: number; createdAt: Date | null; clientCreatedAt: Date | null
   source: string; subCategoryId: string; serviceCoverageCityId: string; serviceCoverageCategoryId: string
   serviceHubId: string; reasonCode: string; platform: string; daysSearched: number; diagnostics: Record<string, number>
@@ -30,12 +31,21 @@ export interface SlotUnavailabilityEvent {
 const string = (value: unknown) => typeof value === "string" ? value : ""
 const integer = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : 0
 const date = (value: unknown) => value instanceof Timestamp ? value.toDate() : null
+export function customerIdentity(data: DocumentData) {
+  const reference = data.customer_id
+  const path = reference instanceof DocumentReference && /^customer\/[^/]+$/.test(reference.path) ? reference.path : ""
+  const uid = string(data.customerUid)
+  // The document reference is authoritative; UID supports events without a reference.
+  const customerPath = path || (uid && !uid.includes("/") ? "customer/" + uid : "")
+  return { customerPath, customerUid: customerPath.split("/")[1] || "" }
+}
 export function parseEvent(id: string, data: DocumentData): SlotUnavailabilityEvent {
   const diagnostics: Record<string, number> = {}
   if (data.diagnostics && typeof data.diagnostics === "object" && !Array.isArray(data.diagnostics)) {
     for (const [key, value] of Object.entries(data.diagnostics)) diagnostics[key] = integer(value)
   }
   return {
+    ...customerIdentity(data), customerName: "", customerPhone: "", customerEmail: "", customerStatus: "Not recorded",
     id, eventType: string(data.eventType), eventVersion: integer(data.eventVersion),
     createdAt: date(data.createdAt), clientCreatedAt: date(data.clientCreatedAt),
     source: string(data.source), subCategoryId: string(data.subCategoryId),
@@ -89,7 +99,22 @@ export class SlotUnavailabilityRepository {
     const hub = category && valid(event.serviceHubId) ? `${category}/service_hubs/${event.serviceHubId}` : ""
     const service = valid(event.subCategoryId) ? `service_subcategories/${event.subCategoryId}` : ""
     const [c, cat, h, s] = await Promise.all([cityPath, category, hub, service].map(path => path ? this.lookup(path) : Promise.resolve({} as DocumentData)))
-    return { ...event, cityName: string(c.cityName) || event.serviceCoverageCityId || "Unresolved city",
+    let customer: DocumentData = {}
+    let customerStatus = "Not recorded"
+    if (event.customerPath) {
+      try {
+        customer = await this.lookup(event.customerPath)
+        customerStatus = Object.keys(customer).length ? "Available" : "Customer record not found"
+      } catch {
+        // A restricted or deleted customer must not hide the availability event.
+        customerStatus = "Customer details unavailable"
+      }
+    }
+    return { ...event,
+      customerName: string(customer.display_name) || string(customer.customer_name) || string(customer.name),
+      customerPhone: string(customer.phone_number) || (typeof customer.contact_no === "number" ? String(customer.contact_no) : string(customer.contact_no)),
+      customerEmail: string(customer.email), customerStatus,
+      cityName: string(c.cityName) || event.serviceCoverageCityId || "Unresolved city",
       categoryName: string(cat.categoryName) || event.serviceCoverageCategoryId || "Unresolved category",
       categoryId: string(cat.categoryId) || string(cat.categoryId?.id),
       hubName: string(h.hubName) || event.serviceHubId || "Unresolved hub",

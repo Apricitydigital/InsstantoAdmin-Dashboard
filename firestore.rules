@@ -82,15 +82,21 @@ service cloud.firestore {
         && addedNote.type == 'admin_note';
     }
 
-    // Anonymous telemetry is append-only, including for superadmins.
+    // Slot-unavailability telemetry is append-only, including for superadmins.
     match /slot_unavailability_events/{eventId} {
       allow read: if canRead('analytics:view');
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly([
           'eventType', 'eventVersion', 'createdAt', 'clientCreatedAt', 'source',
           'subCategoryId', 'serviceCoverageCityId', 'serviceCoverageCategoryId',
-          'serviceHubId', 'reasonCode', 'daysSearched', 'platform', 'diagnostics'
+          'serviceHubId', 'reasonCode', 'daysSearched', 'platform', 'diagnostics',
+          'customer_id', 'customerUid'
         ])
+        && (!('customerUid' in request.resource.data)
+          || (request.resource.data.customerUid is string && request.resource.data.customerUid == request.auth.uid))
+        && (!('customer_id' in request.resource.data)
+          || (request.resource.data.customer_id is path
+            && request.resource.data.customer_id == /databases/$(database)/documents/customer/$(request.auth.uid)))
         && request.resource.data.eventType == 'slots_unavailable'
         && request.resource.data.eventVersion == 1
         && request.resource.data.createdAt == request.time
@@ -171,6 +177,10 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
     match /credits_purchase_record/{docId} {
+      allow read: if canRead('partners:view') || canRead('customers:view');
+      allow write: if isSuperAdmin();
+    }
+    match /credits_spend_record/{docId} {
       allow read: if canRead('partners:view') || canRead('customers:view');
       allow write: if isSuperAdmin();
     }

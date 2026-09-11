@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Timestamp } from "firebase/firestore"
+import { initializeApp } from "firebase/app"
+import { doc, getFirestore, Timestamp } from "firebase/firestore"
 import { categoryPath, filterEvents, groupEvents, hubPath, parseEvent } from "./slot-unavailability"
 
 test("telemetry parsing tolerates missing and malformed fields without inventing identities", () => {
@@ -34,4 +35,17 @@ test("group summaries count occurrences, sum diagnostics, and retain the latest 
   assert.equal(groups[0].leadTime, 8)
   assert.equal(groups[0].last?.getTime(), 2000)
   assert.deepEqual(groups[0].reasons, { no_schedules_found: 2 })
+})
+
+
+test("customer references resolve to customer documents, with UID fallback for older writers", () => {
+  const db = getFirestore(initializeApp({ projectId: "slot-availability-test" }, "slot-availability-test"))
+  const ref = doc(db, "customer", "customer-123")
+  assert.equal(parseEvent("reference", { customer_id: ref }).customerUid, "customer-123")
+  assert.equal(parseEvent("reference", { customer_id: ref }).customerPath, "customer/customer-123")
+  assert.equal(parseEvent("uid", { customerUid: "uid-only" }).customerPath, "customer/uid-only")
+  assert.equal(parseEvent("both", { customer_id: ref, customerUid: "different" }).customerUid, "customer-123")
+  assert.equal(parseEvent("wrong-collection", { customer_id: doc(db, "users", "admin") }).customerPath, "")
+  assert.equal(parseEvent("invalid", { customerUid: "bad/path" }).customerPath, "")
+  assert.equal(parseEvent("legacy", {}).customerUid, "")
 })
