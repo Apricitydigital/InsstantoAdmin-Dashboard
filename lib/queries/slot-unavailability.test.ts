@@ -49,3 +49,20 @@ test("customer references resolve to customer documents, with UID fallback for o
   assert.equal(parseEvent("invalid", { customerUid: "bad/path" }).customerPath, "")
   assert.equal(parseEvent("legacy", {}).customerUid, "")
 })
+
+
+test("visit snapshots preserve dates, disabled times, and explicit outcomes", () => {
+  const event = parseEvent("visit", { outcome: "back_unbooked", slotDays: [
+    { date: "2026-09-15", slots: [] },
+    { date: "2026-09-14", slots: [{ label: "09:00", available: false }, { label: "14:00", available: true }, { label: "16:00", available: "false" }] }
+  ] })
+  assert.equal(event.outcome, "back_unbooked")
+  assert.deepEqual(event.slotDays.map(d => d.date), ["2026-09-14", "2026-09-15"])
+  assert.deepEqual(event.slotDays.map(d => d.reasonCode), ["", ""])
+  assert.deepEqual(event.slotDays[0].slots.map(s => s.available), [false, true, null])
+  assert.equal(event.slotDays[1].slots.length, 0)
+  assert.equal(parseEvent("old", {}).outcome, "unknown")
+  assert.deepEqual(parseEvent("old", {}).slotDays, [])
+  assert.deepEqual(parseEvent("bad", {slotDays: [null, {}, {date: "bad"}]}).slotDays, [])
+  assert.equal(filterEvents([event, parseEvent("booked", {outcome: "booked"})], {outcome: "back_unbooked"}).length, 1)
+})

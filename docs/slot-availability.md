@@ -29,3 +29,8 @@ npx tsx --test lib/queries/slot-unavailability.test.ts
 npx tsc --noEmit --incremental false
 npm run build
 ```
+
+
+## Visit outcomes and date/slot snapshots
+
+The admin supports version-2 snapshots with all recorded dates and enabled/disabled slot times. The regular customer checkout now emits an immediate `viewed` snapshot after loading all seven dates, so a missing Driver slot for today is recorded even if tomorrow has availability. Final Back-without-booking and booked outcomes remain supported by the admin but are not yet emitted by the customer app. Legacy events remain outcome-unknown and have no slot snapshot. See [customer integration contract](customer-slot-visit-contract.md) for the required producer behavior and payload. Rules are updated locally, not deployed.

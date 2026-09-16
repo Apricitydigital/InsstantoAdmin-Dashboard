@@ -20,7 +20,20 @@ export type CatalogueNode = {
   data: DocumentData
 }
 
-export type CatalogueItem = CatalogueNode & { options: CatalogueNode[] }
+export type ServiceDetails = {
+  price?: number
+  beforePrice?: number
+  description?: string
+  duration?: string
+  credits?: number
+  image?: string
+  comboPackage?: boolean
+}
+
+export type CatalogueItem = CatalogueNode & {
+  details: ServiceDetails
+  options: CatalogueNode[]
+}
 export type CatalogueSubcategory = CatalogueNode & { items: CatalogueItem[] }
 export type CatalogueCategory = CatalogueNode & { subcategories: CatalogueSubcategory[] }
 
@@ -60,6 +73,11 @@ const db = () => getFirestoreDb()
 function referenceId(value: unknown): string | undefined {
   if (value instanceof DocumentReference) return value.id
   if (typeof value === "string") return value.split("/").filter(Boolean).pop()
+  if (value && typeof value === "object") {
+    const candidate = value as { id?: unknown; path?: unknown }
+    if (typeof candidate.id === "string" && candidate.id) return candidate.id
+    if (typeof candidate.path === "string") return candidate.path.split("/").filter(Boolean).pop()
+  }
   return undefined
 }
 
@@ -72,8 +90,32 @@ function nodeName(data: DocumentData, fallback: string) {
     data.itemName,
     data.optionName,
     data.service_name,
+    data.serviceName,
   ]
   return candidates.find((value) => typeof value === "string" && value.trim())?.trim() || fallback
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function serviceDetails(data: DocumentData): ServiceDetails {
+  const itemType = data.service_SubCategoriesItems_type
+  return {
+    price: optionalNumber(data.price),
+    beforePrice: optionalNumber(data.before_price),
+    description: optionalText(data.description),
+    duration: optionalText(data.duration),
+    credits: optionalNumber(data.service_credits),
+    image: optionalText(data.service_image),
+    comboPackage: itemType && typeof itemType === "object" && typeof itemType.comboPackages === "boolean"
+      ? itemType.comboPackages
+      : undefined,
+  }
 }
 
 function nodeActive(data: DocumentData): boolean | undefined {
@@ -179,6 +221,7 @@ export async function fetchServiceCatalogue(): Promise<CatalogueCategory[]> {
       path: snapshot.ref.path,
       active: nodeActive(data),
       data,
+      details: serviceDetails(data),
       options: [],
     }
     itemMap.set(snapshot.id, item)
@@ -186,6 +229,9 @@ export async function fetchServiceCatalogue(): Promise<CatalogueCategory[]> {
       "service_subcategory_id",
       "service_subCategory_id",
       "service_subcategory",
+      "service_subCategory",
+      "service_Subcategory_id",
+      "service_SubCategory_id",
       "sub_category_id",
     ])
     subcategoryMap.get(subcategoryId || "")?.items.push(item)
@@ -359,4 +405,77 @@ export async function setPincodeActive(hubPath: string, code: number, Active: bo
     if (!found) throw new Error(`Pincode ${code} was not found in the hub document`)
     transaction.update(hubRef, updates)
   })
+}
+
+export type PriceAdjustment = "increase" | "decrease"
+
+export type PriceAdjustmentResult = {
+  updated: number
+  skipped: number
+}
+
+function adjustedCurrency(value: number, percentage: number, adjustment: PriceAdjustment) {
+  const multiplier = adjustment === "increase" ? 1 + percentage / 100 : 1 - percentage / 100
+  return Math.max(0, Math.round(value * multiplier))
+}
+
+/**
+ * Adjusts the live and crossed-out prices on service item documents.
+ * Transactions read the latest values, so an older admin screen cannot
+ * accidentally overwrite a price that changed after the catalogue loaded.
+ */
+export async function adjustServicePrices(
+  paths: string[],
+  percentage: number,
+  adjustment: PriceAdjustment,
+): Promise<PriceAdjustmentResult> {
+  const maximum = adjustment === "decrease" ? 100 : 1000
+  if (!Number.isFinite(percentage) || percentage <= 0 || percentage > maximum) {
+    throw new Error(`Enter a percentage greater than 0 and no more than ${maximum}`)
+  }
+
+  const uniquePaths = [...new Set(paths)]
+  if (!uniquePaths.length) throw new Error("No services were selected")
+  if (uniquePaths.some((path) => !/^service_SubCategoriesItems\/[^/]+$/.test(path))) {
+    throw new Error("The selection contains an invalid service document")
+  }
+
+  let updated = 0
+  let skipped = 0
+
+  // Stay comfortably below Firestore's transaction write limit.
+  for (let index = 0; index < uniquePaths.length; index += 200) {
+    const pathsInTransaction = uniquePaths.slice(index, index + 200)
+    const result = await runTransaction(db(), async (transaction) => {
+      const snapshots = await Promise.all(pathsInTransaction.map((path) => transaction.get(doc(db(), path))))
+      let transactionUpdated = 0
+      let transactionSkipped = 0
+
+      for (const snapshot of snapshots) {
+        if (!snapshot.exists()) {
+          transactionSkipped += 1
+          continue
+        }
+
+        const data = snapshot.data()
+        const price = optionalNumber(data.price)
+        if (price == null) {
+          transactionSkipped += 1
+          continue
+        }
+
+        const updates: Record<string, number> = { price: adjustedCurrency(price, percentage, adjustment) }
+        const beforePrice = optionalNumber(data.before_price)
+        if (beforePrice != null) updates.before_price = adjustedCurrency(beforePrice, percentage, adjustment)
+        transaction.update(snapshot.ref, updates)
+        transactionUpdated += 1
+      }
+
+      return { updated: transactionUpdated, skipped: transactionSkipped }
+    })
+    updated += result.updated
+    skipped += result.skipped
+  }
+
+  return { updated, skipped }
 }

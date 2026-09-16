@@ -90,15 +90,38 @@ service cloud.firestore {
           'eventType', 'eventVersion', 'createdAt', 'clientCreatedAt', 'source',
           'subCategoryId', 'serviceCoverageCityId', 'serviceCoverageCategoryId',
           'serviceHubId', 'reasonCode', 'daysSearched', 'platform', 'diagnostics',
-          'customer_id', 'customerUid'
+          'customer_id', 'customerUid', 'visitId', 'openedAt', 'snapshotAt', 'outcome', 'timeZone', 'slotDays'
         ])
         && (!('customerUid' in request.resource.data)
           || (request.resource.data.customerUid is string && request.resource.data.customerUid == request.auth.uid))
         && (!('customer_id' in request.resource.data)
           || (request.resource.data.customer_id is path
             && request.resource.data.customer_id == /databases/$(database)/documents/customer/$(request.auth.uid)))
-        && request.resource.data.eventType == 'slots_unavailable'
-        && request.resource.data.eventVersion == 1
+        && ((request.resource.data.eventType == 'slots_unavailable'
+            && request.resource.data.eventVersion == 1
+            && !request.resource.data.keys().hasAny(['visitId', 'openedAt', 'snapshotAt', 'outcome', 'timeZone', 'slotDays']))
+          || (request.resource.data.eventType == 'slot_visit_ended'
+            && request.resource.data.eventVersion == 2
+            && request.resource.data.visitId == eventId
+            && request.resource.data.openedAt is timestamp
+            && request.resource.data.snapshotAt is timestamp
+            && request.resource.data.openedAt <= request.resource.data.snapshotAt
+            && request.resource.data.snapshotAt <= request.resource.data.clientCreatedAt
+            && request.resource.data.outcome in ['back_unbooked', 'booked']
+            && request.resource.data.timeZone is string
+            && request.resource.data.slotDays is list
+            && request.resource.data.slotDays.size() == request.resource.data.daysSearched)
+          || (request.resource.data.eventType == 'slot_availability_snapshot'
+            && request.resource.data.eventVersion == 2
+            && request.resource.data.visitId == eventId
+            && request.resource.data.openedAt is timestamp
+            && request.resource.data.snapshotAt is timestamp
+            && request.resource.data.openedAt <= request.resource.data.snapshotAt
+            && request.resource.data.snapshotAt <= request.resource.data.clientCreatedAt
+            && request.resource.data.outcome == 'viewed'
+            && request.resource.data.timeZone is string
+            && request.resource.data.slotDays is list
+            && request.resource.data.slotDays.size() == request.resource.data.daysSearched))
         && request.resource.data.createdAt == request.time
         && request.resource.data.clientCreatedAt is timestamp
         && request.resource.data.source in ['checkout_regular', 'checkout_monthly', 'reschedule']
@@ -112,6 +135,39 @@ service cloud.firestore {
         && request.resource.data.diagnostics is map;
       allow update, delete: if false;
     }
+    match /slot_availability_requests/{requestId} {
+      allow read: if canRead('analytics:view');
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'createdAt', 'customer_id', 'customerUid', 'visitId', 'requestedDate',
+          'source', 'subCategoryId', 'serviceCoverageCityId',
+          'serviceCoverageCategoryId', 'serviceHubId', 'priority', 'status',
+          'platform'
+        ])
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.customerUid == request.auth.uid
+        && request.resource.data.customer_id ==
+          /databases/$(database)/documents/customer/$(request.auth.uid)
+        && request.resource.data.visitId is string
+        && request.resource.data.requestedDate is string
+        && request.resource.data.source in [
+          'checkout_regular', 'checkout_monthly', 'reschedule'
+        ]
+        && request.resource.data.subCategoryId is string
+        && request.resource.data.serviceCoverageCityId is string
+        && request.resource.data.serviceCoverageCategoryId is string
+        && request.resource.data.serviceHubId is string
+        && request.resource.data.priority == 'urgent'
+        && request.resource.data.status == 'open'
+        && request.resource.data.platform is string;
+      allow update: if canRead('analytics:view')
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'handledAt'])
+        && request.resource.data.status == 'handled'
+        && request.resource.data.handledAt == request.time;
+      allow delete: if false;
+    }
+
     // Customers and admins can read coverage. Only superadmins may change it.
     match /service_coverage/{cityId} {
       allow read: if signedIn();
@@ -230,7 +286,9 @@ service cloud.firestore {
     // superadmin role receives dashboard-wide mutation rights.
     match /{collectionName}/{document=**} {
       allow read: if canViewDashboard() || hasPermission('analytics:view');
-      allow write: if collectionName != 'slot_unavailability_events' && isSuperAdmin();
+      allow write: if collectionName != 'slot_unavailability_events'
+        && collectionName != 'slot_availability_requests'
+        && isSuperAdmin();
     }
   }
 }

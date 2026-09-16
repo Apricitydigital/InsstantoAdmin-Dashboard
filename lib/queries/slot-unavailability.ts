@@ -10,6 +10,7 @@ export const REASONS: Record<string, string> = {
   service_slots_disabled: "Monthly slots disabled",
   coverage_unavailable: "Coverage unavailable",
   no_slots_after_filters: "No slots after filters",
+  partial_date_unavailability: "Some dates unavailable",
   unknown: "Unknown",
 }
 export const SOURCES: Record<string, string> = { checkout_regular: "Regular checkout", checkout_monthly: "Monthly / yearly checkout", reschedule: "Rescheduling" }
@@ -21,7 +22,18 @@ export const DIAGNOSTICS: Record<string, string> = {
   leadTimeExcluded: "Entries removed by lead time", displayedSlotCandidates: "Displayed slot candidates",
   showSlotsDisabled: "Slots administratively disabled",
 }
+export const OUTCOMES: Record<string, string> = { viewed: "Slot screen opened", back_unbooked: "Back without booking", booked: "Booked", unknown: "Outcome not recorded" }
+export interface SlotDaySnapshot { date: string; reasonCode: string; slots: { label: string; available: boolean | null; reasonCode: string }[] }
+export function parseSlotDays(value: unknown): SlotDaySnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(day => day && typeof day === "object" && typeof day.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(day.date)).map(day => ({
+    date: day.date,
+    reasonCode: typeof day.reasonCode === "string" ? day.reasonCode : "",
+    slots: Array.isArray(day.slots) ? day.slots.filter((slot: any) => slot && typeof slot.label === "string").map((slot: any) => ({ label: slot.label, available: typeof slot.available === "boolean" ? slot.available : null, reasonCode: typeof slot.reasonCode === "string" ? slot.reasonCode : "" })) : [],
+  })).sort((a, b) => a.date.localeCompare(b.date))
+}
 export interface SlotUnavailabilityEvent {
+  outcome: string; visitId: string; openedAt: Date | null; snapshotAt: Date | null; timeZone: string; slotDays: SlotDaySnapshot[]
   customerUid: string; customerPath: string; customerName: string; customerPhone: string; customerEmail: string; customerStatus: string
   id: string; eventType: string; eventVersion: number; createdAt: Date | null; clientCreatedAt: Date | null
   source: string; subCategoryId: string; serviceCoverageCityId: string; serviceCoverageCategoryId: string
@@ -45,6 +57,7 @@ export function parseEvent(id: string, data: DocumentData): SlotUnavailabilityEv
     for (const [key, value] of Object.entries(data.diagnostics)) diagnostics[key] = integer(value)
   }
   return {
+    outcome: string(data.outcome) || "unknown", visitId: string(data.visitId), openedAt: date(data.openedAt), snapshotAt: date(data.snapshotAt), timeZone: string(data.timeZone), slotDays: parseSlotDays(data.slotDays),
     ...customerIdentity(data), customerName: "", customerPhone: "", customerEmail: "", customerStatus: "Not recorded",
     id, eventType: string(data.eventType), eventVersion: integer(data.eventVersion),
     createdAt: date(data.createdAt), clientCreatedAt: date(data.clientCreatedAt),
@@ -55,7 +68,7 @@ export function parseEvent(id: string, data: DocumentData): SlotUnavailabilityEv
     cityName: "", categoryName: "", categoryId: "", hubName: "", serviceName: "",
   }
 }
-export type EventFilters = Partial<Record<"serviceCoverageCityId" | "categoryPath" | "hubPath" | "subCategoryId" | "reasonCode" | "source" | "platform", string>>
+export type EventFilters = Partial<Record<"serviceCoverageCityId" | "categoryPath" | "hubPath" | "subCategoryId" | "reasonCode" | "source" | "platform" | "outcome", string>>
 export const categoryPath = (e: SlotUnavailabilityEvent) => `${e.serviceCoverageCityId}/${e.serviceCoverageCategoryId}`
 export const hubPath = (e: SlotUnavailabilityEvent) => `${categoryPath(e)}/${e.serviceHubId}`
 export function filterEvents(events: SlotUnavailabilityEvent[], filters: EventFilters) {

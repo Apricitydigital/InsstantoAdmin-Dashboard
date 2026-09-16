@@ -20,14 +20,17 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth"
 import {
+  adjustServicePrices,
   assignCategory,
   CatalogueCategory,
+  CatalogueItem,
   CoverageCategory,
   CoverageCity,
   CoverageHub,
   CoveragePincode,
   fetchCoverage,
   fetchServiceCatalogue,
+  type PriceAdjustment,
   renameCoverage,
   saveCity,
   saveHub,
@@ -38,13 +41,13 @@ import {
 import {
   AlertCircle,
   Building2,
-  CheckCircle2,
   ChevronRight,
-  CircleOff,
   FolderTree,
   Loader2,
   MapPin,
+  Minus,
   Pencil,
+  Percent,
   Plus,
   RefreshCw,
   Search,
@@ -57,6 +60,7 @@ type Modal =
   | { type: "hub"; city: CoverageCity; category: CoverageCategory }
   | { type: "pin"; city: CoverageCity; category: CoverageCategory; hub: CoverageHub; pin?: CoveragePincode }
   | { type: "rename"; path: string; field: "cityName" | "hubName"; current: string }
+  | { type: "price"; label: string; items: CatalogueItem[]; adjustment: PriceAdjustment }
   | null
 
 function StatusBadge({ active }: { active?: boolean }) {
@@ -73,8 +77,9 @@ function EmptyState({ children }: { children: React.ReactNode }) {
 }
 
 export default function ServicesPage() {
-  const { hasPermission } = useAuth()
+  const { user, hasPermission } = useAuth()
   const canWrite = hasPermission("services:write")
+  const isSuperAdmin = user?.role === "superadmin"
   const [catalogue, setCatalogue] = useState<CatalogueCategory[]>([])
   const [coverage, setCoverage] = useState<CoverageCity[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,6 +91,8 @@ export default function ServicesPage() {
   const [categoryId, setCategoryId] = useState("")
   const [pinCode, setPinCode] = useState("")
   const [areaNames, setAreaNames] = useState("")
+  const [percentage, setPercentage] = useState("")
+  const [success, setSuccess] = useState("")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -109,10 +116,12 @@ export default function ServicesPage() {
   const openModal = (next: Modal) => {
     setModal(next)
     setError("")
+    setSuccess("")
     setName(next?.type === "rename" ? next.current : "")
     setCategoryId("")
     setPinCode(next?.type === "pin" && next.pin ? String(next.pin.code) : "")
     setAreaNames(next?.type === "pin" && next.pin ? next.pin.areaNames.join(", ") : "")
+    setPercentage("")
   }
 
   const runWrite = async (work: () => Promise<void>) => {
@@ -131,6 +140,26 @@ export default function ServicesPage() {
 
   const submitModal = () => {
     if (!modal) return
+    if (modal.type === "price") {
+      const value = Number(percentage)
+      const maximum = modal.adjustment === "decrease" ? 100 : 1000
+      if (!percentage.trim() || !Number.isFinite(value) || value <= 0 || value > maximum) {
+        return setError(`Enter a percentage greater than 0 and no more than ${maximum}`)
+      }
+      setSaving(true)
+      setError("")
+      void adjustServicePrices(modal.items.map((item) => item.path), value, modal.adjustment)
+        .then(async (result) => {
+          setModal(null)
+          await load()
+          const skipped = result.skipped ? ` ${result.skipped} without a numeric price were skipped.` : ""
+          const action = modal.adjustment === "increase" ? "increased" : "decreased"
+          setSuccess(`Prices ${action} by ${value}% for ${result.updated} service${result.updated === 1 ? "" : "s"}.${skipped}`)
+        })
+        .catch((cause) => setError(cause instanceof Error ? cause.message : "The prices could not be updated"))
+        .finally(() => setSaving(false))
+      return
+    }
     if (modal.type === "city") return void runWrite(() => saveCity(name))
     if (modal.type === "rename") return void runWrite(() => renameCoverage(modal.path, modal.field, name))
     if (modal.type === "category") {
@@ -169,17 +198,32 @@ export default function ServicesPage() {
                 ...item,
                 options: item.options.filter((option) => option.name.toLowerCase().includes(query)),
               }))
-              .filter((item) => item.name.toLowerCase().includes(query) || item.options.length),
+              .filter((item) =>
+                item.name.toLowerCase().includes(query)
+                || item.details.description?.toLowerCase().includes(query)
+                || item.details.duration?.toLowerCase().includes(query)
+                || item.options.length,
+              ),
           }))
           .filter((subcategory) => subcategory.name.toLowerCase().includes(query) || subcategory.items.length),
       }))
       .filter((category) => category.name.toLowerCase().includes(query) || category.subcategories.length)
   }, [catalogue, search])
 
+  const categoryItems = (id: string) =>
+    catalogue.find((category) => category.id === id)?.subcategories.flatMap((subcategory) => subcategory.items) || []
+
+  const subcategoryItems = (id: string) =>
+    catalogue.flatMap((category) => category.subcategories).find((subcategory) => subcategory.id === id)?.items || []
+
   const availableCategories = modal?.type === "category"
     ? catalogue.filter(
         (category) => category.path && !modal.city.categories.some((assigned) => assigned.categoryId === category.id),
       )
+    : []
+
+  const eligiblePriceItems = modal?.type === "price"
+    ? modal.items.filter((item) => item.details.price != null)
     : []
 
   const runStatusWrite = async (work: () => Promise<void>, applyLocal: () => void) => {
@@ -243,6 +287,11 @@ export default function ServicesPage() {
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {error}
           </div>
         )}
+        {success && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+            {success}
+          </div>
+        )}
 
         <Tabs defaultValue="services" className="space-y-5">
           <TabsList className="grid w-full max-w-lg grid-cols-2">
@@ -259,33 +308,61 @@ export default function ServicesPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2"><FolderTree className="h-5 w-5" /> Service catalogue</CardTitle>
-                  <CardDescription>Exact document IDs and paths are shown to make reference issues visible.</CardDescription>
+                  <CardDescription>Live service details from service_SubCategoriesItems. Price changes are available only to super admins.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Accordion type="multiple" className="space-y-2">
                     {filteredCatalogue.map((category) => (
                       <AccordionItem key={category.id} value={`cat-${category.id}`} className="rounded-lg border px-4">
-                        <AccordionTrigger>
-                          <NodeTitle name={category.name} id={category.id} path={category.path} active={category.active} count={`${category.subcategories.length} subcategories`} />
-                        </AccordionTrigger>
+                        <div className="flex items-center gap-2">
+                          <AccordionTrigger className="min-w-0 flex-1">
+                            <NodeTitle name={category.name} id={category.id} path={category.path} active={category.active} count={`${category.subcategories.length} groups`} />
+                          </AccordionTrigger>
+                          {isSuperAdmin && (
+                            <PriceActionButtons
+                              disabled={saving || !categoryItems(category.id).some((item) => item.details.price != null)}
+                              scopeLabel={`${category.name} category prices`}
+                              onSelect={(adjustment) => openModal({ type: "price", label: `all ${category.name} services`, items: categoryItems(category.id), adjustment })}
+                            />
+                          )}
+                        </div>
                         <AccordionContent className="space-y-2 pl-3">
                           {category.subcategories.length ? category.subcategories.map((subcategory) => (
                             <Accordion key={subcategory.id} type="multiple">
                               <AccordionItem value={`sub-${subcategory.id}`} className="rounded-md border px-4">
-                                <AccordionTrigger>
-                                  <NodeTitle name={subcategory.name} id={subcategory.id} path={subcategory.path} active={subcategory.active} count={`${subcategory.items.length} items`} />
-                                </AccordionTrigger>
+                                <div className="flex items-center gap-2">
+                                  <AccordionTrigger className="min-w-0 flex-1">
+                                    <NodeTitle name={subcategory.name} id={subcategory.id} path={subcategory.path} active={subcategory.active} count={`${subcategory.items.length} services`} />
+                                  </AccordionTrigger>
+                                  {isSuperAdmin && (
+                                    <PriceActionButtons
+                                      disabled={saving || !subcategoryItems(subcategory.id).some((item) => item.details.price != null)}
+                                      scopeLabel={`${subcategory.name} group prices`}
+                                      onSelect={(adjustment) => openModal({ type: "price", label: `all ${subcategory.name} services`, items: subcategoryItems(subcategory.id), adjustment })}
+                                    />
+                                  )}
+                                </div>
                                 <AccordionContent className="space-y-2 pl-3">
                                   {subcategory.items.length ? subcategory.items.map((item) => (
                                     <div key={item.id} className="rounded-md border bg-muted/20 p-3">
-                                      <NodeTitle name={item.name} id={item.id} path={item.path} active={item.active} count={`${item.options.length} options`} />
+                                      <div className="flex items-start gap-2">
+                                        <NodeTitle name={item.name} id={item.id} path={item.path} active={item.active} count={item.options.length ? `${item.options.length} options` : undefined} />
+                                        {isSuperAdmin && (
+                                          <PriceActionButtons
+                                            disabled={saving || item.details.price == null}
+                                            scopeLabel={`${item.name} price`}
+                                            onSelect={(adjustment) => openModal({ type: "price", label: item.name, items: [item], adjustment })}
+                                          />
+                                        )}
+                                      </div>
+                                      <ServiceDetails item={item} />
                                       {item.options.length > 0 && (
                                         <div className="mt-3 space-y-2 border-l-2 pl-4">
                                           {item.options.map((option) => <NodeTitle key={option.path} name={option.name} id={option.id} path={option.path} active={option.active} />)}
                                         </div>
                                       )}
                                     </div>
-                                  )) : <EmptyState>No linked subcategory items found.</EmptyState>}
+                                  )) : <EmptyState>No linked services found.</EmptyState>}
                                 </AccordionContent>
                               </AccordionItem>
                             </Accordion>
@@ -342,7 +419,29 @@ export default function ServicesPage() {
               <DialogTitle>{modalTitle(modal)}</DialogTitle>
               <DialogDescription>{modalDescription(modal)}</DialogDescription>
             </DialogHeader>
-            {modal?.type === "category" ? (
+            {modal?.type === "price" ? (
+              <div className="space-y-4">
+                <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                  <div><span className="font-medium">{eligiblePriceItems.length}</span> priced service{eligiblePriceItems.length === 1 ? "" : "s"} will be updated.</div>
+                  {modal.items.length !== eligiblePriceItems.length && (
+                    <div className="mt-1 text-muted-foreground">{modal.items.length - eligiblePriceItems.length} service{modal.items.length - eligiblePriceItems.length === 1 ? "" : "s"} without a numeric price will be skipped.</div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="price-percentage">{modal.adjustment === "increase" ? "Increase" : "Decrease"} by</Label>
+                  <div className="relative">
+                    <Input id="price-percentage" type="number" min="0.01" max={modal.adjustment === "decrease" ? "100" : "1000"} step="0.01" value={percentage} onChange={(event) => setPercentage(event.target.value)} className="pr-9" autoFocus />
+                    <Percent className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Both price and before_price are {modal.adjustment === "increase" ? "increased" : "decreased"} and rounded to the nearest rupee.</p>
+                </div>
+                {eligiblePriceItems[0]?.details.price != null && Number(percentage) > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    Example: {formatCurrency(eligiblePriceItems[0].details.price)} becomes {formatCurrency(adjustedPrice(eligiblePriceItems[0].details.price, Number(percentage), modal.adjustment))}.
+                  </div>
+                )}
+              </div>
+            ) : modal?.type === "category" ? (
               <div className="space-y-2"><Label>Service category</Label><Select value={categoryId} onValueChange={setCategoryId}><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger><SelectContent>{availableCategories.map((category) => <SelectItem key={category.id} value={category.id}>{category.name} ({category.id})</SelectItem>)}</SelectContent></Select>{!availableCategories.length && <p className="text-sm text-muted-foreground">All available catalogue categories are already assigned.</p>}</div>
             ) : modal?.type === "pin" ? (
               <div className="space-y-4">
@@ -353,7 +452,7 @@ export default function ServicesPage() {
               <div className="space-y-2"><Label htmlFor="entity-name">Name</Label><Input id="entity-name" value={name} onChange={(event) => setName(event.target.value)} autoFocus /></div>
             )}
             {error && <div className="flex gap-2 rounded-md bg-red-50 p-3 text-sm text-red-800"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}
-            <DialogFooter><Button variant="outline" onClick={() => setModal(null)}>Cancel</Button><Button onClick={submitModal} disabled={saving || (modal?.type === "category" && !availableCategories.length)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save</Button></DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setModal(null)}>Cancel</Button><Button onClick={submitModal} disabled={saving || (modal?.type === "category" && !availableCategories.length) || (modal?.type === "price" && !eligiblePriceItems.length)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{modal?.type === "price" ? `${modal.adjustment === "increase" ? "Increase" : "Decrease"} prices` : "Save"}</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </main>
@@ -412,6 +511,69 @@ function NodeTitle({ name, id, path, active, count }: { name: string; id: string
   return <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pr-3 text-left"><ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /><div className="min-w-0 flex-1"><div className="font-medium">{name}</div><code className="block truncate text-xs font-normal text-muted-foreground" title={path}>{id}{path ? ` · ${path}` : ""}</code></div>{count && <span className="text-xs font-normal text-muted-foreground">{count}</span>}<StatusBadge active={active} /></div>
 }
 
+function PriceActionButtons({ disabled, scopeLabel, onSelect }: {
+  disabled: boolean
+  scopeLabel: string
+  onSelect: (adjustment: PriceAdjustment) => void
+}) {
+  return (
+    <div className="flex shrink-0 gap-1">
+      <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => onSelect("increase")} aria-label={`Increase ${scopeLabel}`}>
+        <Plus className="mr-1 h-3.5 w-3.5" /> Increase
+      </Button>
+      <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => onSelect("decrease")} aria-label={`Decrease ${scopeLabel}`}>
+        <Minus className="mr-1 h-3.5 w-3.5" /> Decrease
+      </Button>
+    </div>
+  )
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+function adjustedPrice(value: number, percentage: number, adjustment: PriceAdjustment) {
+  const multiplier = adjustment === "increase" ? 1 + percentage / 100 : 1 - percentage / 100
+  return Math.max(0, Math.round(value * multiplier))
+}
+
+function ServiceDetails({ item }: { item: CatalogueItem }) {
+  const details = item.details
+  return (
+    <div className="mt-3 rounded-md border bg-background p-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        {details.price != null ? (
+          <span className="text-lg font-semibold text-foreground">{formatCurrency(details.price)}</span>
+        ) : (
+          <Badge variant="destructive">Price missing</Badge>
+        )}
+        {details.beforePrice != null && (
+          <span className="text-sm text-muted-foreground line-through">{formatCurrency(details.beforePrice)}</span>
+        )}
+        {details.duration && <Badge variant="outline">{details.duration}</Badge>}
+        {details.credits != null && <Badge variant="outline">{details.credits} credits</Badge>}
+        {details.comboPackage != null && (
+          <Badge variant="secondary">{details.comboPackage ? "Combo package" : "Regular service"}</Badge>
+        )}
+      </div>
+      {details.description ? (
+        <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{details.description}</p>
+      ) : (
+        <p className="mt-2 text-xs text-amber-700">No description is stored for this service.</p>
+      )}
+      {details.image && (
+        <a href={details.image} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-medium text-primary underline-offset-4 hover:underline">
+          Open service image
+        </a>
+      )}
+    </div>
+  )
+}
+
 function Loading() {
   return <div className="flex items-center justify-center gap-2 rounded-lg border p-12 text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /> Loading Firestore data…</div>
 }
@@ -422,11 +584,13 @@ function modalTitle(modal: Modal) {
   if (modal.type === "category") return `Assign category to ${modal.city.cityName}`
   if (modal.type === "hub") return `Add hub to ${modal.category.categoryName}`
   if (modal.type === "pin") return modal.pin ? `Edit pincode ${modal.pin.code}` : `Add pincode to ${modal.hub.hubName}`
+  if (modal.type === "price") return `${modal.adjustment === "increase" ? "Increase" : "Decrease"} price: ${modal.label}`
   return modal.field === "cityName" ? "Rename city" : "Rename hub"
 }
 
 function modalDescription(modal: Modal) {
   if (modal?.type === "category") return "The real catalogue DocumentReference will be stored in categoryId."
   if (modal?.type === "pin") return "New and edited coverage is stored in the canonical pincodes array."
+  if (modal?.type === "price") return `This applies a one-time percentage ${modal.adjustment} to the latest Firestore prices. It cannot be automatically undone.`
   return "Active is saved as a Firestore Boolean and can be changed after creation."
 }
