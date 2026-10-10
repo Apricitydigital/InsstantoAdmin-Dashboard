@@ -1,65 +1,45 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { BarChart3, Star, CheckCircle } from "lucide-react"
-import { mockServicePerformance } from "@/lib/queries/analytics"
+import { BarChart3, Loader2 } from "lucide-react"
+import { fetchServiceAnalytics } from "@/lib/queries/analytics"
+import type { TopCategory } from "@/lib/queries/top-services"
 
-export function ServicePerformance() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-secondary" />
-          Service Performance
-        </CardTitle>
-        <CardDescription>Top performing services by bookings and revenue</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {mockServicePerformance.map((service, index) => (
-            <div key={service.serviceName} className="p-4 rounded-lg border bg-card">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-medium">{service.serviceName}</h4>
-                  <Badge variant="outline" className="text-xs mt-1">
-                    {service.category}
-                  </Badge>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-primary">₹{service.revenue.toLocaleString()}</p>
-                  <p className="text-sm text-muted-foreground">{service.bookings} bookings</p>
-                </div>
-              </div>
+type Props = { fromDate: string; toDate: string }
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-1">
-                      <Star className="h-3 w-3 text-yellow-500" />
-                      Rating
-                    </span>
-                    <span className="font-medium">{service.rating}</span>
-                  </div>
-                  <Progress value={service.rating * 20} className="h-2" />
-                </div>
+export function ServicePerformance({ fromDate, toDate }: Props) {
+  const [categories, setCategories] = useState<TopCategory[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-1">
-                      <CheckCircle className="h-3 w-3 text-green-500" />
-                      Completion
-                    </span>
-                    <span className="font-medium">{service.completionRate}%</span>
-                  </div>
-                  <Progress value={service.completionRate} className="h-2" />
-                </div>
-              </div>
-            </div>
-          ))}
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    setError("")
+    fetchServiceAnalytics(fromDate, toDate)
+      .then((result) => active && setCategories(result.slice(0, 5)))
+      .catch((cause) => active && setError(cause instanceof Error ? cause.message : "Service analytics could not be loaded."))
+      .finally(() => active && setLoading(false))
+    return () => { active = false }
+  }, [fromDate, toDate])
+
+  const totalBookings = useMemo(() => categories.reduce((sum, item) => sum + item.totalBookings, 0), [categories])
+
+  return <Card>
+    <CardHeader><CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-secondary" />Service Performance</CardTitle><CardDescription>Top completed-booking categories from live data</CardDescription></CardHeader>
+    <CardContent>
+      {loading ? <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading services…</div> : error ? <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</p> :
+      <div className="space-y-4">{categories.map((category) => {
+        const share = totalBookings ? (category.totalBookings / totalBookings) * 100 : 0
+        const averageValue = category.totalBookings ? category.totalRevenue / category.totalBookings : 0
+        return <div key={category.categoryName} className="rounded-lg border bg-card p-4">
+          <div className="mb-3 flex items-start justify-between gap-3"><div><h4 className="font-medium">{category.categoryName}</h4><Badge variant="outline" className="mt-1 text-xs">Top service: {category.mostBookedService || "Not available"}</Badge></div><div className="text-right"><p className="font-semibold text-primary">₹{Math.round(category.totalRevenue).toLocaleString("en-IN")}</p><p className="text-sm text-muted-foreground">{category.totalBookings} bookings</p></div></div>
+          <div className="flex justify-between text-xs text-muted-foreground"><span>{share.toFixed(1)}% of top-category bookings</span><span>₹{Math.round(averageValue).toLocaleString("en-IN")} avg.</span></div><Progress value={share} className="mt-2 h-2" />
         </div>
-      </CardContent>
-    </Card>
-  )
+      })}{!categories.length && <p className="py-10 text-center text-sm text-muted-foreground">No completed services found in this period.</p>}</div>}
+    </CardContent>
+  </Card>
 }

@@ -32,6 +32,7 @@ import {
   fetchServiceCatalogue,
   type PriceAdjustment,
   renameCoverage,
+  reuseHub,
   saveCity,
   saveHub,
   savePincodes,
@@ -138,6 +139,35 @@ export default function ServicesPage() {
     }
   }
 
+  const addHubLocally = (cityPath: string, categoryPath: string, hub: CoverageHub) => {
+    setCoverage((cities) => cities.map((city) => city.path === cityPath ? {
+      ...city,
+      categories: city.categories.map((category) => category.path === categoryPath ? {
+        ...category,
+        hubs: [...category.hubs, hub],
+      } : category),
+    } : city))
+  }
+
+  const runHubWrite = async (
+    city: CoverageCity,
+    category: CoverageCategory,
+    work: () => Promise<CoverageHub>,
+  ) => {
+    setSaving(true)
+    setError("")
+    try {
+      const hub = await work()
+      addHubLocally(city.path, category.path, hub)
+      setModal(null)
+      setSuccess(hub.hubName + " was added without closing your place in the coverage tree.")
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The hub could not be saved")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const submitModal = () => {
     if (!modal) return
     if (modal.type === "price") {
@@ -167,7 +197,13 @@ export default function ServicesPage() {
       if (!category) return setError("Select a service category")
       return void runWrite(() => assignCategory(modal.city.id, category))
     }
-    if (modal.type === "hub") return void runWrite(() => saveHub(modal.city.id, modal.category.id, name))
+    if (modal.type === "hub") {
+      return void runHubWrite(
+        modal.city,
+        modal.category,
+        () => saveHub(modal.city.id, modal.category.id, name),
+      )
+    }
     const code = Number(pinCode)
     if (!/^\d{6}$/.test(pinCode) || !Number.isInteger(code)) return setError("Enter a valid six-digit pincode")
     const duplicate = modal.category.hubs.some((hub) =>
@@ -221,6 +257,30 @@ export default function ServicesPage() {
         (category) => category.path && !modal.city.categories.some((assigned) => assigned.categoryId === category.id),
       )
     : []
+
+  const hubSuggestions = useMemo(() => {
+    if (modal?.type !== "hub") return []
+    const existingIds = new Set(modal.category.hubs.map((hub) => hub.id))
+    const suggestions = new Map<string, { hub: CoverageHub; categoryName: string }>()
+    modal.city.categories.forEach((category) => {
+      if (category.path === modal.category.path) return
+      category.hubs.forEach((hub) => {
+        if (!existingIds.has(hub.id) && !suggestions.has(hub.id)) {
+          suggestions.set(hub.id, { hub, categoryName: category.categoryName })
+        }
+      })
+    })
+    return [...suggestions.values()].sort((a, b) => a.hub.hubName.localeCompare(b.hub.hubName))
+  }, [modal])
+
+  const approveSuggestedHub = (source: CoverageHub) => {
+    if (modal?.type !== "hub") return
+    void runHubWrite(
+      modal.city,
+      modal.category,
+      () => reuseHub(modal.city.id, modal.category.id, source),
+    )
+  }
 
   const eligiblePriceItems = modal?.type === "price"
     ? modal.items.filter((item) => item.details.price != null)
@@ -443,6 +503,37 @@ export default function ServicesPage() {
               </div>
             ) : modal?.type === "category" ? (
               <div className="space-y-2"><Label>Service category</Label><Select value={categoryId} onValueChange={setCategoryId}><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger><SelectContent>{availableCategories.map((category) => <SelectItem key={category.id} value={category.id}>{category.name} ({category.id})</SelectItem>)}</SelectContent></Select>{!availableCategories.length && <p className="text-sm text-muted-foreground">All available catalogue categories are already assigned.</p>}</div>
+            ) : modal?.type === "hub" ? (
+              <div className="space-y-5">
+                {hubSuggestions.length > 0 && (
+                  <div className="space-y-2">
+                    <div>
+                      <Label>Suggested existing hubs</Label>
+                      <p className="text-xs text-muted-foreground">Approve a hub to reuse its code, name, and pincodes from another service.</p>
+                    </div>
+                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                      {hubSuggestions.map(({ hub, categoryName }) => (
+                        <div key={hub.id} className="flex items-center gap-3 rounded-md border p-3">
+                          <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium">{hub.hubName}</div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              <code>{hub.id}</code> · from {categoryName} · {hub.pincodes.length} pincode{hub.pincodes.length === 1 ? "" : "s"}
+                            </div>
+                          </div>
+                          <Button type="button" size="sm" onClick={() => approveSuggestedHub(hub)} disabled={saving}>
+                            Approve
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2 border-t pt-4">
+                  <Label htmlFor="entity-name">{hubSuggestions.length ? "Or create a new hub" : "Hub name"}</Label>
+                  <Input id="entity-name" value={name} onChange={(event) => setName(event.target.value)} autoFocus={!hubSuggestions.length} />
+                </div>
+              </div>
             ) : modal?.type === "pin" ? (
               <div className="space-y-4">
                 <div className="space-y-2"><Label htmlFor="pin-code">Six-digit pincode</Label><Input id="pin-code" inputMode="numeric" maxLength={6} value={pinCode} onChange={(event) => setPinCode(event.target.value.replace(/\D/g, ""))} /></div>
@@ -590,6 +681,7 @@ function modalTitle(modal: Modal) {
 
 function modalDescription(modal: Modal) {
   if (modal?.type === "category") return "The real catalogue DocumentReference will be stored in categoryId."
+  if (modal?.type === "hub") return "Reuse a hub already configured for another service, or create a new one."
   if (modal?.type === "pin") return "New and edited coverage is stored in the canonical pincodes array."
   if (modal?.type === "price") return `This applies a one-time percentage ${modal.adjustment} to the latest Firestore prices. It cannot be automatically undone.`
   return "Active is saved as a Firestore Boolean and can be changed after creation."

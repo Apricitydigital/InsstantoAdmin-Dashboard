@@ -15,7 +15,6 @@ export async function POST(request: NextRequest) {
     const {
       completedBookings = "0",
       cancelledBookings = "0",
-      totalAmountPaid = "0",
       netProfit = "0",
       marginPercentage = "0",
       avgOrderValue = "0",
@@ -24,6 +23,7 @@ export async function POST(request: NextRequest) {
       electrical = "0",
       security = "0",
       driver = "0",
+      maid = "0",
       totalComplaints = "0",
       resolvedComplaints = "0",
       totalBookingAmount = "0",
@@ -44,11 +44,14 @@ export async function POST(request: NextRequest) {
           namespace: "c4480be9_4f75_4099_a294_ea1c07054ac4",
           to_and_components: [
             {
-              to: ["+919472394155", "+919166477214", "+917225896737", "+919111899909", "+919479882385", "+919229499999", "+919516600328", "+919752786776","+918889012777","+919669596612"],
+              // to: ["+919472394155", "+919166477214", "+917225896737", "+919111899909", "+919479882385", "+919229499999", "+919516600328", "+919752786776","+918889012777","+919669596612"],
+              to: ["+919669596612"],
               components: {
                 body_1: {
                   type: "text",
-                  value: new Date().toLocaleDateString(),
+                  value: new Date().toLocaleDateString("en-IN", {
+                    timeZone: "Asia/Kolkata",
+                  }),
                 },
                 body_2: {
                   type: "text",
@@ -76,29 +79,33 @@ export async function POST(request: NextRequest) {
                 },
                 body_8: {
                   type: "text",
-                  value: `${String(totalBookingAmount)}`,
+                  value: String(maid),
                 },
                 body_9: {
                   type: "text",
-                  value: `${String(netProfit)}`,
+                  value: `${String(totalBookingAmount)}`,
                 },
                 body_10: {
                   type: "text",
-                  value: `${String(marginPercentage)}%`,
+                  value: `${String(netProfit)}`,
                 },
                 body_11: {
                   type: "text",
-                  value: `${String(customerAcquisitionCost)}`,
+                  value: String(marginPercentage),
                 },
                 body_12: {
                   type: "text",
-                  value: `${String(avgOrderValue)}`,
+                  value: `${String(customerAcquisitionCost)}`,
                 },
                 body_13: {
                   type: "text",
-                  value: String(totalComplaints),
+                  value: `${String(avgOrderValue)}`,
                 },
                 body_14: {
+                  type: "text",
+                  value: String(totalComplaints),
+                },
+                body_15: {
                   type: "text",
                   value: String(resolvedComplaints),
                 },

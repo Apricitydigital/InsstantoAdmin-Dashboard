@@ -8,6 +8,7 @@ import {
   getDoc,
   getDocs,
   runTransaction,
+  setDoc,
   updateDoc,
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
@@ -345,13 +346,41 @@ export async function assignCategory(cityId: string, category: CatalogueCategory
   })
 }
 
-export async function saveHub(cityId: string, categoryId: string, hubName: string) {
+export async function saveHub(cityId: string, categoryId: string, hubName: string): Promise<CoverageHub> {
   if (!hubName.trim()) throw new Error("Enter a valid hub name")
-  await addDoc(collection(db(), "service_coverage", cityId, "Categories", categoryId, "service_hubs"), {
+  const hubRef = await addDoc(collection(db(), "service_coverage", cityId, "Categories", categoryId, "service_hubs"), {
     hubName: hubName.trim(),
     Active: true,
     pincodes: [],
   })
+  return {
+    id: hubRef.id,
+    path: hubRef.path,
+    hubName: hubName.trim(),
+    Active: true,
+    pincodes: [],
+  }
+}
+
+export async function reuseHub(
+  cityId: string,
+  categoryId: string,
+  source: CoverageHub,
+): Promise<CoverageHub> {
+  const hubRef = doc(db(), "service_coverage", cityId, "Categories", categoryId, "service_hubs", source.id)
+  const pincodes = source.pincodes.map((pin) => ({ ...pin, areaNames: [...pin.areaNames] }))
+  await setDoc(hubRef, {
+    hubName: source.hubName,
+    Active: source.Active,
+    pincodes,
+  })
+  return {
+    id: hubRef.id,
+    path: hubRef.path,
+    hubName: source.hubName,
+    Active: source.Active,
+    pincodes,
+  }
 }
 
 export async function setActive(path: string, Active: boolean) {

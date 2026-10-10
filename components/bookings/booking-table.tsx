@@ -3,16 +3,19 @@
 import { useEffect, useState, useMemo } from "react"
 import {
   collection,
+  doc,
   getDocs,
   onSnapshot,
   query,
   where,
   documentId,
   Timestamp,
+  updateDoc,
   DocumentReference,
   DocumentData,
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
+import { useAuth } from "@/lib/auth"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,6 +28,16 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
   Table,
   TableBody,
   TableCell,
@@ -32,7 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, Phone, Calendar, Search, Filter, ChevronDown, Eye, MapPin, Clock3, IndianRupee, RotateCcw } from "lucide-react"
+import { Loader2, Phone, Calendar, Search, Filter, ChevronDown, Eye, MapPin, Clock3, IndianRupee, RotateCcw, UserPlus } from "lucide-react"
 import { DetailsSheet } from "@/components/bookings/booking-component"
 
 // ✅ import from partner.ts
@@ -55,6 +68,10 @@ type BookingDoc = {
 }
 
 type PartyInfo = { name?: string; phone?: string }
+type PartnerOption = PartyInfo & {
+  id: string
+  ref: DocumentReference<DocumentData>
+}
 type ServiceMap = Record<string, string[]>
 type SortField = "bookingDate" | "timeSlot"
 
@@ -123,6 +140,8 @@ interface BookingTableProps {
 
 export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const db = getFirestoreDb()
+  const { user } = useAuth()
+  const canAssignPartner = user?.role === "superadmin"
 
   const [allBookings, setAllBookings] = useState<BookingDoc[]>([])
   const [customerMap, setCustomerMap] = useState<Record<string, PartyInfo>>({})
@@ -139,6 +158,11 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedBooking, setSelectedBooking] = useState<BookingDoc | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [partnerOptions, setPartnerOptions] = useState<PartnerOption[]>([])
+  const [assignmentBooking, setAssignmentBooking] = useState<BookingDoc | null>(null)
+  const [selectedPartnerId, setSelectedPartnerId] = useState("")
+  const [assigning, setAssigning] = useState(false)
+  const [assignmentError, setAssignmentError] = useState("")
 
   useEffect(() => {
     setLoading(true)
@@ -157,6 +181,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       .then((partnerIds) => {
         if (!active) return
         setOnboardedPartnerIds(partnerIds)
+        void hydrateOnboardedPartners(partnerIds)
 
         const bookingsQuery = query(
           collection(db, "bookings"),
@@ -242,6 +267,31 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
     setProviderMap((prev) => ({ ...prev, ...newProv }))
   }
 
+  const hydrateOnboardedPartners = async (partnerIds: Set<string>) => {
+    try {
+      const snapshots = await mapWithConcurrency(
+        chunkArray([...partnerIds]),
+        (ids) => getDocs(query(collection(db, "customer"), where(documentId(), "in", ids)))
+      )
+      const partners: PartnerOption[] = []
+      const parties: Record<string, PartyInfo> = {}
+      snapshots.forEach((snapshot) => snapshot.forEach((partner) => {
+        const data = partner.data()
+        const info = {
+          name: data.customer_name || data.display_name || partner.id,
+          phone: data.phone_number,
+        }
+        partners.push({ id: partner.id, ref: partner.ref, ...info })
+        parties[partner.ref.path] = info
+      }))
+      partners.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id))
+      setPartnerOptions(partners)
+      setProviderMap((previous) => ({ ...previous, ...parties }))
+    } catch (cause) {
+      console.error("Error loading assignable partners:", cause)
+    }
+  }
+
   const fetchServicesInfo = async (bookingDocs: BookingDoc[]) => {
     try {
       const servicesInfo: ServiceMap = {}
@@ -325,9 +375,8 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       const customerId = b.customer_id?.id
 
       const isRealBooking =
-        !!providerId &&
-        onboardedPartnerIds.has(providerId) &&
-        customerId !== INTERNAL_CUSTOMER_ID
+        customerId !== INTERNAL_CUSTOMER_ID &&
+        (!providerId || onboardedPartnerIds.has(providerId))
 
       const matchesBookingType =
         bookingTypeFilter === "all" || isRealBooking
@@ -423,6 +472,40 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const openBooking = (booking: BookingDoc) => {
     setSelectedBooking(booking)
     setDetailsOpen(true)
+  }
+
+  const openPartnerAssignment = (booking: BookingDoc) => {
+    setAssignmentBooking(booking)
+    setSelectedPartnerId(booking.provider_id?.id || "")
+    setAssignmentError("")
+  }
+
+  const assignPartner = async () => {
+    if (!assignmentBooking) return
+    const partner = partnerOptions.find((option) => option.id === selectedPartnerId)
+    if (!partner) {
+      setAssignmentError("Select an onboarded partner")
+      return
+    }
+
+    setAssigning(true)
+    setAssignmentError("")
+    try {
+      const randomValue = new Uint32Array(1)
+      crypto.getRandomValues(randomValue)
+      const otp = 1000 + (randomValue[0] % 9000)
+      await updateDoc(doc(db, "bookings", assignmentBooking.id), {
+        provider_id: partner.ref,
+        status: "Accepted",
+        otp,
+      })
+      setAssignmentBooking(null)
+      setSelectedPartnerId("")
+    } catch (cause) {
+      setAssignmentError(cause instanceof Error ? cause.message : "The partner could not be assigned")
+    } finally {
+      setAssigning(false)
+    }
   }
 
   return (
@@ -598,7 +681,14 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
                       </TableCell>
 
                       <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => openBooking(b)}><Eye className="mr-1.5 h-4 w-4" />View details</Button>
+                        <div className="flex flex-col gap-2">
+                          {canAssignPartner && (
+                            <Button size="sm" onClick={() => openPartnerAssignment(b)}>
+                              <UserPlus className="mr-1.5 h-4 w-4" />{b.provider_id ? "Reassign" : "Assign partner"}
+                            </Button>
+                          )}
+                          <Button variant="outline" size="sm" onClick={() => openBooking(b)}><Eye className="mr-1.5 h-4 w-4" />View details</Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
@@ -617,7 +707,10 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
               <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono text-xs font-semibold text-slate-500">{booking.id}</p><p className="mt-1 truncate font-semibold text-slate-950">{customer.name || "Customer details loading"}</p></div><Badge className={statusColors[normalizeStatus(booking.status)] || statusColors.default}>{booking.status ? formatStatusLabel(booking.status) : "Unknown"}</Badge></div>
               <div className="my-4 grid gap-2 text-sm text-slate-600"><p className="truncate font-medium text-slate-800">{services.join(", ")}</p><p className="flex items-center gap-2"><Calendar className="h-4 w-4 text-slate-400" />{fmtDate(booking.date)}</p><p className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-slate-400" />{fmtDate(booking.timeSlot)}</p><p className="flex items-center gap-2"><Phone className="h-4 w-4 text-slate-400" />{customer.phone || "Phone unavailable"}</p><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-slate-400" /><span className="truncate">{booking.bookingAddress || booking.city || "Address unavailable"}</span></p></div>
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3"><div><p className="text-[11px] text-slate-400">Partner</p><p className="max-w-[150px] truncate text-sm font-medium">{provider.name || "Unassigned"}</p></div><p className="flex items-center font-bold text-slate-950"><IndianRupee className="h-4 w-4" />{amountPaid(booking).toLocaleString()}</p></div>
-              <Button variant="outline" size="sm" onClick={() => openBooking(booking)} className="mt-4 w-full"><Eye className="mr-2 h-4 w-4" />View complete details</Button>
+              <div className="mt-4 grid gap-2">
+                {canAssignPartner && <Button size="sm" onClick={() => openPartnerAssignment(booking)}><UserPlus className="mr-2 h-4 w-4" />{booking.provider_id ? "Reassign partner" : "Assign partner"}</Button>}
+                <Button variant="outline" size="sm" onClick={() => openBooking(booking)}><Eye className="mr-2 h-4 w-4" />View complete details</Button>
+              </div>
             </article>
           })}
         </div>
@@ -655,6 +748,43 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
           </div>
         </div>
       </CardContent>
+
+      <Dialog open={Boolean(assignmentBooking)} onOpenChange={(open) => {
+        if (!open && !assigning) {
+          setAssignmentBooking(null)
+          setAssignmentError("")
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{assignmentBooking?.provider_id ? "Reassign partner" : "Assign partner"}</DialogTitle>
+            <DialogDescription>
+              The booking will be accepted and a new random four-digit OTP will be created.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Onboarded partner</Label>
+            <Select value={selectedPartnerId} onValueChange={setSelectedPartnerId}>
+              <SelectTrigger><SelectValue placeholder="Select a partner" /></SelectTrigger>
+              <SelectContent>
+                {partnerOptions.map((partner) => (
+                  <SelectItem key={partner.id} value={partner.id}>
+                    {partner.name || partner.id}{partner.phone ? " · " + partner.phone : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!partnerOptions.length && <p className="text-sm text-muted-foreground">No onboarded partners are available.</p>}
+          </div>
+          {assignmentError && <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{assignmentError}</div>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignmentBooking(null)} disabled={assigning}>Cancel</Button>
+            <Button onClick={() => void assignPartner()} disabled={assigning || !selectedPartnerId}>
+              {assigning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Assign and accept
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {selectedBooking && (
         <DetailsSheet

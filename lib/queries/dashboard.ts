@@ -77,11 +77,12 @@ type PnlRow = {
   expenses?: number | string
 }
 
-type CategoryName =
+export type CategoryName =
   | "Cleaning"
   | "Electrical"
   | "Security"
   | "Driver"
+  | "Maid"
 
 type CategoryCounts = Record<CategoryName, number>
 
@@ -107,6 +108,7 @@ const EMPTY_CATEGORY_COUNTS: CategoryCounts = {
   Electrical: 0,
   Security: 0,
   Driver: 0,
+  Maid: 0,
 }
 
 // ============================================================
@@ -1380,7 +1382,7 @@ async function resolveCategoryName(
   return cachedRequest
 }
 
-async function resolveBookingCategoryName(
+export async function resolveBookingCategoryName(
   subCategoryCartReference:
     | DocumentReference
     | null
@@ -1404,7 +1406,7 @@ async function resolveBookingCategoryName(
   )
 }
 
-function mapCategoryName(
+export function mapCategoryName(
   rawCategoryName:
     | string
     | null
@@ -1417,6 +1419,12 @@ function mapCategoryName(
 
   if (!categoryName) {
     return null
+  }
+
+  if (
+    categoryName.includes("maid")
+  ) {
+    return "Maid"
   }
 
   if (
