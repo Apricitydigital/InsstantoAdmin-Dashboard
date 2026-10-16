@@ -18,14 +18,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-import {
   Table,
   TableBody,
   TableCell,
@@ -43,6 +35,13 @@ type CartDoc = {
   id: string
   customer_id?: DocumentReference<DocumentData> | string | null
   service_name?: string
+  service_subCategory?: DocumentReference<DocumentData> | string | null
+  service_category_id?: DocumentReference<DocumentData> | string | null
+  service_category?: DocumentReference<DocumentData> | string | null
+  category_id?: DocumentReference<DocumentData> | string | null
+  categoryName?: string
+  category_name?: string
+  service_category_name?: string
   quantity?: number
   item_price?: number
   subTotal?: number
@@ -64,10 +63,12 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
 
   const [allCart, setAllCart] = useState<CartDoc[]>([])
   const [customerMap, setCustomerMap] = useState<Record<string, CustomerInfo>>({})
+  const [categoryMap, setCategoryMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">("all")
+  const [categoryFilter, setCategoryFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
 
   // ---------- Helpers ----------
@@ -91,6 +92,39 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
     const d = safeToDate(v)
     if (!d) return "—"
     return d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+  }
+
+  const getInlineCategory = (cart: CartDoc) =>
+    [cart.categoryName, cart.category_name, cart.service_category_name].find(
+      (value) => typeof value === "string" && value.trim()
+    )?.trim()
+
+  const inferCategoryFromServiceName = (serviceName?: string) => {
+    const name = normalize(serviceName)
+    if (name.includes("maid")) return "Maid"
+    if (name.includes("clean")) return "Cleaning"
+    if (name.includes("electric") || name.includes("elec")) return "Electrical"
+    if (name.includes("security")) return "Security"
+    if (name.includes("driver")) return "Driver"
+    return ""
+  }
+
+  const getCategoryReference = (cart: CartDoc) => {
+    const value =
+      cart.service_subCategory ||
+      cart.service_category_id ||
+      cart.service_category ||
+      cart.category_id
+
+    if (value && typeof value === "object" && "path" in value) {
+      return value as DocumentReference<DocumentData>
+    }
+
+    if (typeof value === "string" && value.includes("/")) {
+      return doc(db, value.replace(/^\/+|\/+$/g, ""))
+    }
+
+    return null
   }
 
   // ---------- Customer Hydration ----------
@@ -159,6 +193,55 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
     }
   }
 
+  const hydrateCategories = async (docs: CartDoc[]) => {
+    const nextMap: Record<string, string> = {}
+    const references = new Map<string, DocumentReference<DocumentData>>()
+
+    docs.forEach((cart) => {
+      const inlineCategory = getInlineCategory(cart)
+      if (inlineCategory) {
+        nextMap[cart.id] = inlineCategory
+        return
+      }
+
+      const reference = getCategoryReference(cart)
+      if (reference) references.set(reference.path, reference)
+    })
+
+    const resolved = await Promise.all(
+      [...references.entries()].map(async ([path, reference]) => {
+        try {
+          const snapshot = await getDoc(reference)
+          if (!snapshot.exists()) return [path, ""] as const
+          const data = snapshot.data()
+          const name = [
+            data.name,
+            data.categoryName,
+            data.category_name,
+            data.service_category_name,
+          ].find((value) => typeof value === "string" && value.trim())
+          return [path, typeof name === "string" ? name.trim() : ""] as const
+        } catch {
+          return [path, ""] as const
+        }
+      })
+    )
+
+    const namesByPath = Object.fromEntries(resolved)
+    docs.forEach((cart) => {
+      if (nextMap[cart.id]) return
+      const reference = getCategoryReference(cart)
+      if (reference && namesByPath[reference.path]) {
+        nextMap[cart.id] = namesByPath[reference.path]
+        return
+      }
+      const inferredCategory = inferCategoryFromServiceName(cart.service_name)
+      if (inferredCategory) nextMap[cart.id] = inferredCategory
+    })
+
+    setCategoryMap(nextMap)
+  }
+
   // ---------- REALTIME LISTENER (NO index required) ----------
   useEffect(() => {
     setLoading(true)
@@ -197,8 +280,10 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
 
           setAllCart(filteredDocs)
 
-          // Hydrate customers without crashing UI
-          await hydrateCustomers(filteredDocs)
+          await Promise.all([
+            hydrateCustomers(filteredDocs),
+            hydrateCategories(filteredDocs),
+          ])
 
           setLoading(false)
         } catch (err: any) {
@@ -217,7 +302,15 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
     return () => unsub()
   }, [db, fromDate, toDate])
 
-  // ---------- Search + Status Filter ----------
+  const categories = useMemo(
+    () =>
+      Array.from(new Set(Object.values(categoryMap).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [categoryMap]
+  )
+
+  // ---------- Search + Status + Category Filter ----------
   const filteredCart = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
 
@@ -231,6 +324,9 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
 
       if (!matchesStatus) return false
 
+      const category = categoryMap[c.id] || ""
+      if (categoryFilter !== "all" && category !== categoryFilter) return false
+
       const customerKey =
         c.customer_id && typeof c.customer_id === "object" && "path" in c.customer_id
           ? (c.customer_id as any).path
@@ -243,6 +339,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
       const text = [
         c.id,
         c.service_name,
+        category,
         c.cartStatus,
         cust.name,
         cust.phone,
@@ -255,7 +352,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
 
       return !term || text.includes(term)
     })
-  }, [allCart, searchTerm, customerMap, statusFilter])
+  }, [allCart, searchTerm, customerMap, categoryMap, statusFilter, categoryFilter])
 
   // ---------- Export CSV ----------
   const exportCSV = () => {
@@ -274,6 +371,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
         customer_name: cust.name || "",
         customer_phone: cust.phone || "",
         service_name: c.service_name || "",
+        service_category: categoryMap[c.id] || "",
         quantity: c.quantity ?? "",
         item_price: c.item_price ?? "",
         sub_total: c.subTotal ?? "",
@@ -317,7 +415,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
   const hasNext = currentPage < totalPages
   const hasPrev = currentPage > 1
 
-  useEffect(() => setCurrentPage(1), [searchTerm, statusFilter])
+  useEffect(() => setCurrentPage(1), [searchTerm, statusFilter, categoryFilter])
 
   // ---------- Status Colors ----------
   const statusColors: Record<string, string> = {
@@ -353,30 +451,43 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
             />
           </div>
 
-          {/* Status Filter + Export */}
-          <div className="grid w-full gap-2 sm:grid-cols-[auto_1fr] lg:w-auto lg:grid-cols-[auto_auto] lg:justify-end">
+          {/* Status + Category Filters + Export */}
+          <div className="grid w-full gap-2 sm:grid-cols-[auto_auto_1fr] lg:w-auto lg:grid-cols-[auto_auto_auto] lg:justify-end">
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
 
-              <Select
+              <select
+                aria-label="Filter cart services by status"
                 value={statusFilter}
-                onValueChange={(v) => setStatusFilter(v as any)}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value as "all" | "paid" | "unpaid")
+                }
+                className="h-10 w-[160px] rounded-lg border border-input bg-white px-3 text-sm text-slate-900 shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
               >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="unpaid">Unpaid</SelectItem>
-                </SelectContent>
-              </Select>
+                <option value="all">All Status</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+              </select>
             </div>
+
+            <select
+              aria-label="Filter cart services by category"
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm text-slate-900 shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30 sm:w-[190px]"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
 
             <Button
               onClick={exportCSV}
               variant="outline"
-              className="whitespace-nowrap"
+              className="h-10 whitespace-nowrap"
               disabled={filteredCart.length === 0}
             >
               <Download className="h-4 w-4 mr-2" />
@@ -393,6 +504,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
                 <TableHead>Cart ID</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Service</TableHead>
+                <TableHead>Category</TableHead>
                 <TableHead>Qty</TableHead>
                 <TableHead>Item Price</TableHead>
                 <TableHead>Subtotal</TableHead>
@@ -406,22 +518,22 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-6">
+                  <TableCell colSpan={11} className="text-center py-6">
                     <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
                     Loading cart...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-red-600 p-4">
+                  <TableCell colSpan={11} className="text-red-600 p-4">
                     {error}
                   </TableCell>
                 </TableRow>
               ) : paginatedCart.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                    {searchTerm
-                      ? "No cart items match your search."
+                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    {searchTerm || statusFilter !== "all" || categoryFilter !== "all"
+                      ? "No cart items match your filters."
                       : "No cart items found in this date range."}
                   </TableCell>
                 </TableRow>
@@ -455,6 +567,10 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
 
                       <TableCell className="truncate max-w-[220px]" title={c.service_name}>
                         {c.service_name || "—"}
+                      </TableCell>
+
+                      <TableCell className="whitespace-nowrap">
+                        {categoryMap[c.id] || "Uncategorized"}
                       </TableCell>
 
                       <TableCell>{c.quantity ?? 1}</TableCell>
