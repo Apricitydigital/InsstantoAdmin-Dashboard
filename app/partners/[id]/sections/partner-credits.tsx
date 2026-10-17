@@ -53,6 +53,7 @@ type PurchaseRecord = {
   id: string
   credits: number
   amount: number
+  bookingId?: string
   date?: Timestamp
   status?: string
   note?: string
@@ -183,6 +184,7 @@ export function PartnerCreditsSection({
             id: snapshot.id,
             credits: toAmount(data.credits_purchased),
             amount: toAmount(data.amount_paid),
+            bookingId: getReferenceId(data.bookingId),
             date: data.purchase_date,
             status:
               typeof data.status === "string" ? data.status : "completed",
@@ -645,6 +647,7 @@ export function PartnerCreditsSection({
                           <TableHead>Date</TableHead>
                           <TableHead>Credits</TableHead>
                           <TableHead>Amount Paid</TableHead>
+                          <TableHead>Booking ID</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Source</TableHead>
                           <TableHead>Note</TableHead>
@@ -656,6 +659,7 @@ export function PartnerCreditsSection({
                             <TableCell className="whitespace-nowrap">{formatDate(record.date)}</TableCell>
                             <TableCell className="font-semibold text-green-700">+{record.credits.toLocaleString("en-IN")}</TableCell>
                             <TableCell>{formatCurrency(record.amount)}</TableCell>
+                            <TableCell className="font-mono text-xs">{record.bookingId || "—"}</TableCell>
                             <TableCell><Badge variant="outline">{record.status || "completed"}</Badge></TableCell>
                             <TableCell>{record.source || "purchase"}</TableCell>
                             <TableCell className="max-w-sm whitespace-normal">{record.note || "—"}</TableCell>

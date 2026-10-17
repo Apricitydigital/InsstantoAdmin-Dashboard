@@ -185,6 +185,7 @@ export function DetailsSheet({
   const financialBooking = bookingDocument
     ? { ...booking, ...bookingDocument }
     : booking
+  const serviceCredits = financialBooking?.service_credits
   const netRevenue = toAmount(financialBooking?.amount_paid)
     - toAmount(financialBooking?.discount_amount)
 
@@ -256,6 +257,12 @@ export function DetailsSheet({
             <DetailBlock label="Amount Paid" value={`₹${toAmount(financialBooking?.amount_paid).toLocaleString("en-IN")}`} />
             <DetailBlock label="Wallet Amount Used" value={`₹${toAmount(financialBooking?.walletAmountUsed).toLocaleString("en-IN")}`} />
             <DetailBlock label="Discount Amount" value={`₹${toAmount(financialBooking?.discount_amount).toLocaleString("en-IN")}`} />
+            <DetailBlock
+              label="Service Credits"
+              value={serviceCredits == null
+                ? "—"
+                : `${toAmount(serviceCredits).toLocaleString("en-IN")} credits`}
+            />
             <DetailBlock
               label="Net Revenue"
               value={`₹${netRevenue.toLocaleString("en-IN")}`}

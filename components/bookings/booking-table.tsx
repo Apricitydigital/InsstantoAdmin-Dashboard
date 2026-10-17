@@ -5,12 +5,13 @@ import {
   collection,
   doc,
   getDocs,
+  limit,
   onSnapshot,
   query,
+  runTransaction,
   where,
   documentId,
   Timestamp,
-  updateDoc,
   DocumentReference,
   DocumentData,
 } from "firebase/firestore"
@@ -61,6 +62,7 @@ type BookingDoc = {
   amount_paid?: number | string
   walletAmountUsed?: number | string
   discount_amount?: number | string
+  service_credits?: number | string
   date?: Timestamp
   timeSlot?: Timestamp
   bookingAddress?: string
@@ -129,6 +131,14 @@ const referenceKey = (value: unknown) => {
   if (typeof value === "string") return value
   if (value && typeof value === "object" && "path" in value) {
     return String((value as { path: unknown }).path)
+  }
+  return ""
+}
+
+const referenceId = (value: unknown) => {
+  if (typeof value === "string") return value.split("/").filter(Boolean).pop() || ""
+  if (value && typeof value === "object" && "id" in value) {
+    return String((value as { id: unknown }).id)
   }
   return ""
 }
@@ -488,21 +498,214 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       return
     }
 
+    const expectedPreviousPartnerId = referenceId(assignmentBooking.provider_id)
+    if (expectedPreviousPartnerId === partner.id) {
+      setAssignmentError("This booking is already assigned to the selected partner")
+      return
+    }
+
     setAssigning(true)
     setAssignmentError("")
     try {
       const randomValue = new Uint32Array(1)
       crypto.getRandomValues(randomValue)
       const otp = 1000 + (randomValue[0] % 9000)
-      await updateDoc(doc(db, "bookings", assignmentBooking.id), {
-        provider_id: partner.ref,
-        status: "Accepted",
-        otp,
+      const bookingReference = doc(db, "bookings", assignmentBooking.id)
+      const previousPartnerReference = assignmentBooking.provider_id || null
+
+      const findCreditAccountReference = async (
+        partnerReference: DocumentReference<DocumentData>
+      ) => {
+        const accountSnapshot = await getDocs(
+          query(
+            collection(db, "partner_overall_credits"),
+            where("service_partner_id", "==", partnerReference),
+            limit(1)
+          )
+        )
+
+        return accountSnapshot.docs[0]?.ref
+          || doc(db, "partner_overall_credits", partnerReference.id)
+      }
+
+      const targetAccountReference = await findCreditAccountReference(partner.ref)
+      const previousAccountReference = previousPartnerReference
+        ? await findCreditAccountReference(previousPartnerReference)
+        : null
+      const spendReference = doc(collection(db, "credits_spend_record"))
+      const refundReference = previousPartnerReference
+        ? doc(collection(db, "credits_purchase_record"))
+        : null
+
+      await runTransaction(db, async (transaction) => {
+        const bookingSnapshot = await transaction.get(bookingReference)
+        if (!bookingSnapshot.exists()) throw new Error("BOOKING_NOT_FOUND")
+
+        const bookingData = bookingSnapshot.data()
+        const currentPreviousPartnerId = referenceId(bookingData.provider_id)
+        if (currentPreviousPartnerId !== expectedPreviousPartnerId) {
+          throw new Error("BOOKING_ASSIGNMENT_CHANGED")
+        }
+
+        const rawServiceCredits = bookingData.service_credits
+        const serviceCredits = Number(rawServiceCredits)
+        if (
+          rawServiceCredits === undefined
+          || rawServiceCredits === null
+          || rawServiceCredits === ""
+          || !Number.isFinite(serviceCredits)
+          || serviceCredits < 0
+        ) {
+          throw new Error("INVALID_SERVICE_CREDITS")
+        }
+
+        const targetAccountSnapshot = await transaction.get(targetAccountReference)
+        const previousAccountSnapshot = previousAccountReference
+          ? await transaction.get(previousAccountReference)
+          : null
+        const targetBalance = targetAccountSnapshot.exists()
+          ? toAmount(targetAccountSnapshot.data().credit_balance)
+          : 0
+
+        if (targetBalance < serviceCredits) {
+          throw new Error("INSUFFICIENT_CREDITS")
+        }
+
+        const previouslyChargedCredits = Number(
+          bookingData.assigned_service_credits ?? serviceCredits
+        )
+        if (!Number.isFinite(previouslyChargedCredits) || previouslyChargedCredits < 0) {
+          throw new Error("INVALID_SERVICE_CREDITS")
+        }
+
+        const now = Timestamp.now()
+        const targetBalanceAfter = targetBalance - serviceCredits
+        const serviceNames = servicesMap[assignmentBooking.id] || []
+        const commonHistoryFields = {
+          bookingId: bookingReference,
+          booking_id: bookingReference,
+          customerId: bookingData.customer_id || null,
+          customer_id: bookingData.customer_id || null,
+          service_names: serviceNames,
+          service_credits: serviceCredits,
+          booking_amount_paid: toAmount(bookingData.amount_paid),
+          wallet_amount_used: toAmount(bookingData.walletAmountUsed),
+          discount_amount: toAmount(bookingData.discount_amount),
+          booking_date: bookingData.date || null,
+          time_slot: bookingData.timeSlot || null,
+          booking_address: bookingData.bookingAddress || "",
+          previous_partner_id: previousPartnerReference,
+          assigned_partner_id: partner.ref,
+          created_by: user?.id || "admin",
+          created_by_email: user?.email || "",
+        }
+
+        if (targetAccountSnapshot.exists()) {
+          transaction.update(targetAccountReference, {
+            service_partner_id: partner.ref,
+            credit_balance: targetBalanceAfter,
+            edited_time: now,
+            updated_by: user?.id || "admin",
+          })
+        } else {
+          transaction.set(targetAccountReference, {
+            service_partner_id: partner.ref,
+            credit_balance: targetBalanceAfter,
+            user_type: "service_partner",
+            WalletBonusStatus: "active",
+            createdAt: now,
+            edited_time: now,
+            created_by: user?.id || "admin",
+          })
+        }
+
+        transaction.set(spendReference, {
+          partnerId: partner.ref,
+          credits_spent: serviceCredits,
+          spend_date: now,
+          status: "completed",
+          source: expectedPreviousPartnerId
+            ? "booking_reassignment"
+            : "booking_assignment",
+          reason: `Credits spent for booking ${assignmentBooking.id}`,
+          note: `Credits spent for booking ${assignmentBooking.id}`,
+          balance_before: targetBalance,
+          balance_after: targetBalanceAfter,
+          ...commonHistoryFields,
+        })
+
+        if (
+          previousPartnerReference
+          && previousAccountReference
+          && previousAccountSnapshot
+          && refundReference
+        ) {
+          const previousBalance = previousAccountSnapshot.exists()
+            ? toAmount(previousAccountSnapshot.data().credit_balance)
+            : 0
+          const previousBalanceAfter = previousBalance + previouslyChargedCredits
+
+          if (previousAccountSnapshot.exists()) {
+            transaction.update(previousAccountReference, {
+              service_partner_id: previousPartnerReference,
+              credit_balance: previousBalanceAfter,
+              edited_time: now,
+              updated_by: user?.id || "admin",
+            })
+          } else {
+            transaction.set(previousAccountReference, {
+              service_partner_id: previousPartnerReference,
+              credit_balance: previousBalanceAfter,
+              user_type: "service_partner",
+              WalletBonusStatus: "active",
+              createdAt: now,
+              edited_time: now,
+              created_by: user?.id || "admin",
+            })
+          }
+
+          transaction.set(refundReference, {
+            partnerId: previousPartnerReference,
+            credits_purchased: previouslyChargedCredits,
+            amount_paid: 0,
+            purchase_date: now,
+            status: "completed",
+            user_type: "service_partner",
+            source: "booking_reassignment_refund",
+            reason: `Credits refunded after booking ${assignmentBooking.id} was reassigned`,
+            note: `Credits refunded after booking ${assignmentBooking.id} was reassigned`,
+            balance_before: previousBalance,
+            balance_after: previousBalanceAfter,
+            refunded_service_credits: previouslyChargedCredits,
+            ...commonHistoryFields,
+          })
+        }
+
+        transaction.update(bookingReference, {
+          provider_id: partner.ref,
+          status: "Accepted",
+          otp,
+          assigned_service_credits: serviceCredits,
+          credit_charge_partner_id: partner.ref,
+          credit_charge_spend_record_id: spendReference,
+          credit_charge_date: now,
+        })
       })
       setAssignmentBooking(null)
       setSelectedPartnerId("")
     } catch (cause) {
-      setAssignmentError(cause instanceof Error ? cause.message : "The partner could not be assigned")
+      const message = cause instanceof Error ? cause.message : ""
+      setAssignmentError(
+        message === "INSUFFICIENT_CREDITS"
+          ? "The selected partner does not have enough credits for this booking."
+          : message === "INVALID_SERVICE_CREDITS"
+            ? "This booking does not have a valid service_credits value."
+            : message === "BOOKING_ASSIGNMENT_CHANGED"
+              ? "The booking assignment changed. Close this dialog and try again."
+              : message === "BOOKING_NOT_FOUND"
+                ? "This booking no longer exists."
+                : message || "The partner could not be assigned"
+      )
     } finally {
       setAssigning(false)
     }
@@ -759,7 +962,9 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
           <DialogHeader>
             <DialogTitle>{assignmentBooking?.provider_id ? "Reassign partner" : "Assign partner"}</DialogTitle>
             <DialogDescription>
-              The booking will be accepted and a new random four-digit OTP will be created.
+              {assignmentBooking?.provider_id
+                ? `${toAmount(assignmentBooking.service_credits).toLocaleString("en-IN")} credits will be refunded to the current partner and deducted from the new partner. A new four-digit OTP will be created.`
+                : `${toAmount(assignmentBooking?.service_credits).toLocaleString("en-IN")} credits will be deducted from the selected partner. The booking will be accepted and a new four-digit OTP will be created.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
