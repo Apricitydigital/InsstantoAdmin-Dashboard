@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { Activity, BarChart3, Calendar, CalendarRange, DollarSign, LayoutDashboard, RefreshCcw, RotateCcw, Star, TrendingUp, Users } from "lucide-react"
 
-import AiAnalysisChatbot from "@/components/admin/AiAnalysisChatbot"
 import { AdminHeader } from "@/components/admin-header"
 import { ProtectedRoute } from "@/components/auth/protected-route"
 import CACGraph from "@/components/dashboard/cac-graph"
@@ -88,8 +87,6 @@ export default function DashboardPage() {
           <section className="space-y-4"><SectionHeading eyebrow="Today" title="Operational pulse" description="Partner performance and current-day availability." /><div className="grid grid-cols-1 gap-4 xl:grid-cols-2"><TopPartnersCard /><DailyOverviewCard /></div></section>
 
           <section className="space-y-4"><SectionHeading eyebrow="Insights" title="Performance breakdown" description="Peak booking slots, leading categories, and customer behaviour." /><PerformanceMetrics fromDate={fromDate} toDate={toDate} /></section>
-
-          <AiAnalysisChatbot module="dashboard" />
         </main>
       </div>
     </div>
