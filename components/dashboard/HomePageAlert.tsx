@@ -39,9 +39,9 @@ import {
 
 const PARTNER_REVIEW_STATUSES = new Set([
   "DocumentsUploaded",
-  "RegistrationFormFilled",
-  "Information_Unverified",
-  "Id_Generated",
+  // "RegistrationFormFilled",
+  // "Information_Unverified",
+  // "Id_Generated",
 ]);
 
 type AlertItem = {
