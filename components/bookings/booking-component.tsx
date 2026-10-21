@@ -42,6 +42,67 @@ type BookingReview = {
   createdAt: Date | null
 }
 
+type ServiceDetailData = {
+  partnerSelfie: string
+  sharedImages: string[]
+  beforeImages: string[]
+  afterImages: string[]
+}
+
+const imageUrls = (value: unknown): string[] => {
+  if (typeof value === "string") return value.trim() ? [value.trim()] : []
+  if (!Array.isArray(value)) return []
+  return value.flatMap(imageUrls)
+}
+
+const uniqueImages = (images: string[]) => [...new Set(images)]
+
+const serviceDetailsFromDocuments = (
+  documents: Record<string, any>[]
+): ServiceDetailData => {
+  const sharedImages: string[] = []
+  const beforeImages: string[] = []
+  const afterImages: string[] = []
+  let partnerSelfie = ""
+
+  documents.forEach((data) => {
+    partnerSelfie = imageUrls(data.partnerSelfie ?? data.partner_selfie)[0]
+      || partnerSelfie
+
+    const serviceImages = data.serviceImages ?? data.service_images
+    if (serviceImages && typeof serviceImages === "object" && !Array.isArray(serviceImages)) {
+      beforeImages.push(...imageUrls(serviceImages.before ?? serviceImages.beforeImages))
+      afterImages.push(...imageUrls(serviceImages.after ?? serviceImages.afterImages))
+    } else {
+      sharedImages.push(...imageUrls(serviceImages))
+    }
+
+    beforeImages.push(...imageUrls(
+      data.beforeServiceImages
+      ?? data.beforeServiceImage
+      ?? data.before_service_images
+      ?? data.before_service_image
+      ?? data.beforeImages
+      ?? data.beforeImage
+    ))
+    afterImages.push(...imageUrls(
+      data.afterServiceImages
+      ?? data.afterServiceImage
+      ?? data.after_service_images
+      ?? data.after_service_image
+      ?? data.afterImages
+      ?? data.afterImage
+    ))
+  })
+
+  return {
+    partnerSelfie,
+    sharedImages: uniqueImages(sharedImages),
+    beforeImages: uniqueImages(beforeImages),
+    afterImages: uniqueImages(afterImages),
+  }
+}
+
 // ----------------------------------------------------
 // MAIN COMPONENT
 // ----------------------------------------------------
@@ -56,7 +117,7 @@ export function DetailsSheet({
 
   const db = getFirestoreDb()
 
-  const [detailData, setDetailData] = useState<any>(null)
+  const [detailData, setDetailData] = useState<ServiceDetailData | null>(null)
   const [bookingDocument, setBookingDocument] = useState<any>(null)
   const [review, setReview] = useState<BookingReview | null>(null)
   const [reviewLoading, setReviewLoading] = useState(false)
@@ -103,7 +164,9 @@ export function DetailsSheet({
       q,
       (snapshot) => {
         if (!snapshot.empty) {
-          setDetailData(snapshot.docs[0].data())
+          setDetailData(serviceDetailsFromDocuments(
+            snapshot.docs.map((detailDocument) => detailDocument.data())
+          ))
         } else {
           setDetailData(null)
         }
@@ -188,6 +251,33 @@ export function DetailsSheet({
   const serviceCredits = financialBooking?.service_credits
   const netRevenue = toAmount(financialBooking?.amount_paid)
     - toAmount(financialBooking?.discount_amount)
+  const serviceIsFinished = Boolean(financialBooking?.endTime)
+    || ["completed", "service_completed"].includes(
+      String(financialBooking?.status || "").toLowerCase().replace(/[\s-]+/g, "_")
+    )
+  const afterImageComesFromSharedList = Boolean(
+    detailData
+    && detailData.afterImages.length === 0
+    && (
+      detailData.sharedImages.length > 3
+      || (serviceIsFinished && detailData.sharedImages.length > 1)
+      || (serviceIsFinished
+        && detailData.beforeImages.length > 0
+        && detailData.sharedImages.length > 0)
+    )
+  )
+  const inferredAfterImages = detailData?.afterImages.length
+    ? detailData.afterImages
+    : detailData && afterImageComesFromSharedList
+      ? detailData.sharedImages.slice(-1)
+      : []
+  const inferredBeforeImages = detailData?.beforeImages.length
+    ? detailData.beforeImages
+    : detailData
+      ? afterImageComesFromSharedList
+        ? detailData.sharedImages.slice(0, -1)
+        : detailData.sharedImages.slice(0, 3)
+      : []
 
 
 
@@ -346,16 +436,16 @@ export function DetailsSheet({
                 )}
 
                 {/* SERVICE IMAGES */}
-                {detailData.serviceImages?.length > 0 && (
+                {(inferredBeforeImages.length > 0 || inferredAfterImages.length > 0) && (
                   <div className="space-y-6">
 
                     {/* BEFORE IMAGES */}
                     <div>
                       <h3 className="font-semibold mb-2">Before Service Images</h3>
 
-                      {detailData.serviceImages.slice(0, 3).length > 0 ? (
+                      {inferredBeforeImages.length > 0 ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {detailData.serviceImages.slice(0, 3).map((img: string, i: number) => (
+                          {inferredBeforeImages.map((img, i) => (
                             <img
                               key={i}
                               src={img}
@@ -374,17 +464,18 @@ export function DetailsSheet({
                     <div>
                       <h3 className="font-semibold mb-2">After Service Image</h3>
 
-                      {detailData.serviceImages.length > 3 ? (
-                        <img
-                          src={detailData.serviceImages[detailData.serviceImages.length - 1]}
-                          alt="after"
-                          onClick={() =>
-                            setPreviewImage(
-                              detailData.serviceImages[detailData.serviceImages.length - 1]
-                            )
-                          }
-                          className="w-full h-40 object-cover rounded-lg border shadow-sm cursor-pointer hover:opacity-90"
-                        />
+                      {inferredAfterImages.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {inferredAfterImages.map((img, i) => (
+                            <img
+                              key={img}
+                              src={img}
+                              alt={`after-${i}`}
+                              onClick={() => setPreviewImage(img)}
+                              className="w-full h-40 object-cover rounded-lg border shadow-sm cursor-pointer hover:opacity-90"
+                            />
+                          ))}
+                        </div>
                       ) : (
                         <p className="text-muted-foreground text-sm">No after image available.</p>
                       )}

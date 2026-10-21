@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { useState } from "react"
-import { CalendarRange, Database, FileSpreadsheet, RotateCcw, ShoppingCart } from "lucide-react"
+import { CalendarRange, Database, FileSpreadsheet, Globe2, RotateCcw, ShoppingCart, Smartphone } from "lucide-react"
 
 import { AdminHeader } from "@/components/admin-header"
 import { ProtectedRoute } from "@/components/auth/protected-route"
@@ -18,6 +18,7 @@ const SheetBookingStats = dynamic(() => import("@/components/bookings/sheet-book
 const SheetBookingTable = dynamic(() => import("@/components/bookings/sheet-booking-table").then((module) => module.SheetBookingTable), { loading: LoadingPanel })
 const CartStats = dynamic(() => import("@/components/cart/cart-stats"), { loading: LoadingPanel })
 const CartTable = dynamic(() => import("@/components/cart/cart-table").then((module) => module.CartTable), { loading: LoadingPanel })
+const PendingBookingTable = dynamic(() => import("@/components/bookings/pending-booking-table").then((module) => module.PendingBookingTable), { loading: LoadingPanel })
 
 function formatDateInput(date: Date) {
   return date.toLocaleDateString("en-CA")
@@ -47,7 +48,7 @@ export default function BookingsPage() {
                 <div className="max-w-2xl">
                   <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><CalendarRange className="h-5 w-5" /></div>
                   <h1 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">Bookings workspace</h1>
-                  <p className="mt-1.5 text-sm leading-6 text-slate-500">Monitor bookings, service fulfilment, revenue, sheet records, and pending cart activity.</p>
+                  <p className="mt-1.5 text-sm leading-6 text-slate-500">Monitor bookings, pending app and web requests, service fulfilment, revenue, sheet records, and cart activity.</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Booking date</p>
@@ -64,10 +65,14 @@ export default function BookingsPage() {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm sm:w-fit">
                 <TabsTrigger value="backend" className="min-w-fit gap-2 rounded-lg px-4 py-2.5 data-[state=active]:bg-slate-900 data-[state=active]:text-white"><Database className="h-4 w-4" />Backend bookings</TabsTrigger>
+                <TabsTrigger value="app-pending" className="min-w-fit gap-2 rounded-lg px-4 py-2.5 data-[state=active]:bg-slate-900 data-[state=active]:text-white"><Smartphone className="h-4 w-4" />App pending</TabsTrigger>
+                <TabsTrigger value="web-pending" className="min-w-fit gap-2 rounded-lg px-4 py-2.5 data-[state=active]:bg-slate-900 data-[state=active]:text-white"><Globe2 className="h-4 w-4" />Web pending</TabsTrigger>
                 <TabsTrigger value="sheet" className="min-w-fit gap-2 rounded-lg px-4 py-2.5 data-[state=active]:bg-slate-900 data-[state=active]:text-white"><FileSpreadsheet className="h-4 w-4" />Sheet bookings</TabsTrigger>
                 <TabsTrigger value="cart" className="min-w-fit gap-2 rounded-lg px-4 py-2.5 data-[state=active]:bg-slate-900 data-[state=active]:text-white"><ShoppingCart className="h-4 w-4" />Cart services</TabsTrigger>
               </TabsList>
               <TabsContent value="backend" className="mt-4 space-y-4 focus-visible:outline-none"><BookingStats fromDate={fromDate} toDate={toDate} /><BookingTable fromDate={fromDate} toDate={toDate} /></TabsContent>
+              <TabsContent value="app-pending" className="mt-4 space-y-4 focus-visible:outline-none"><PendingBookingTable collectionName="pending_bookings" sourceLabel="App" fromDate={fromDate} toDate={toDate} /></TabsContent>
+              <TabsContent value="web-pending" className="mt-4 space-y-4 focus-visible:outline-none"><PendingBookingTable collectionName="web_pending_bookings" sourceLabel="Web" fromDate={fromDate} toDate={toDate} /></TabsContent>
               <TabsContent value="sheet" className="mt-4 space-y-4 focus-visible:outline-none"><SheetBookingStats fromDate={fromDate} toDate={toDate} /><SheetBookingTable fromDate={fromDate} toDate={toDate} /></TabsContent>
               <TabsContent value="cart" className="mt-4 space-y-4 focus-visible:outline-none"><CartStats fromDate={fromDate} toDate={toDate} /><CartTable fromDate={fromDate} toDate={toDate} /></TabsContent>
             </Tabs>

@@ -17,19 +17,22 @@ service cloud.firestore {
     function tokenHasRole(role) {
       return signedIn()
         && 'roleId' in request.auth.token
-        && request.auth.token.roleId == role;
+        && request.auth.token.roleId is string
+        && request.auth.token.roleId.lower() == role;
     }
 
     function userHasRole(role) {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userData().roleId == role;
+        && userData().roleId is string
+        && userData().roleId.lower() == role;
     }
 
     function customerHasRole(role) {
       return signedIn()
         && exists(/databases/$(database)/documents/customer/$(request.auth.uid))
-        && get(/databases/$(database)/documents/customer/$(request.auth.uid)).data.roleId == role;
+        && get(/databases/$(database)/documents/customer/$(request.auth.uid)).data.roleId is string
+        && get(/databases/$(database)/documents/customer/$(request.auth.uid)).data.roleId.lower() == role;
     }
 
     function hasRole(role) {

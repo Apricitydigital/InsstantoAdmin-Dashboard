@@ -695,8 +695,13 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       setSelectedPartnerId("")
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : ""
+      const errorCode = cause && typeof cause === "object" && "code" in cause
+        ? String((cause as { code: unknown }).code)
+        : ""
       setAssignmentError(
-        message === "INSUFFICIENT_CREDITS"
+        errorCode === "permission-denied" || message.toLowerCase().includes("insufficient permissions")
+          ? "Firestore denied this assignment. Sign in with a superadmin account and make sure the latest firestore.rules are deployed."
+          : message === "INSUFFICIENT_CREDITS"
           ? "The selected partner does not have enough credits for this booking."
           : message === "INVALID_SERVICE_CREDITS"
             ? "This booking does not have a valid service_credits value."

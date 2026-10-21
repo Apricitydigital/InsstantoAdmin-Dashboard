@@ -504,6 +504,13 @@ const STATUS_OPTIONS = [
   "Information_Unverified",
 ] as const
 
+const VERIFICATION_REQUEST_STATUSES = new Set([
+  "DocumentsUploaded",
+  "RegistrationFormFilled",
+  "Information_Unverified",
+  "Id_Generated",
+])
+
 type StatusFilter = (typeof STATUS_OPTIONS)[number]
 type PartnerStatus = Exclude<StatusFilter, "All">
 
@@ -591,6 +598,7 @@ export function PartnerTable({
 
   const [loading, setLoading] = useState(false)
   const [updatingPartnerId, setUpdatingPartnerId] = useState<string | null>(null)
+  const [reviewOnly, setReviewOnly] = useState(false)
 
   const canChangePartnerStatus = user?.role === "superadmin"
 
@@ -901,12 +909,16 @@ export function PartnerTable({
             partner.status ===
               statusFilter
 
+          const matchesReviewQueue =
+            !reviewOnly || VERIFICATION_REQUEST_STATUSES.has(partner.status)
+
           return (
             matchesDate &&
             matchesSearch &&
             matchesType &&
             matchesPartnerIds &&
-            matchesStatus
+            matchesStatus &&
+            matchesReviewQueue
           )
         }
       )
@@ -916,9 +928,15 @@ export function PartnerTable({
       typeFilter,
       partnerIdFilter,
       statusFilter,
+      reviewOnly,
       fromDate,
       toDate,
     ])
+
+  const verificationRequestCount = useMemo(
+    () => partners.filter((partner) => VERIFICATION_REQUEST_STATUSES.has(partner.status)).length,
+    [partners]
+  )
 
   /* ==========================================================
      ACTIVE FILTER
@@ -928,13 +946,15 @@ export function PartnerTable({
     searchTerm !== "" ||
     typeFilter !== "all" ||
     partnerIdFilter !== "all" ||
-    statusFilter !== "All"
+    statusFilter !== "All" ||
+    reviewOnly
 
   const resetFilters = () => {
     setSearchTerm("")
     setTypeFilter("all")
     setPartnerIdFilter("all")
     setStatusFilter("All")
+    setReviewOnly(false)
   }
 
   /* ==========================================================
@@ -1027,6 +1047,30 @@ export function PartnerTable({
 
       <CardHeader className="border-b border-slate-100 bg-white px-5 py-5">
 
+        {canChangePartnerStatus && verificationRequestCount > 0 && (
+          <div className="mb-5 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-amber-950">
+                {verificationRequestCount} partner verification request{verificationRequestCount === 1 ? "" : "s"}
+              </p>
+              <p className="mt-1 text-xs text-amber-800">
+                New registrations and document uploads are waiting for superadmin review.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant={reviewOnly ? "default" : "outline"}
+              onClick={() => {
+                setReviewOnly((current) => !current)
+                setStatusFilter("All")
+              }}
+              className="shrink-0"
+            >
+              {reviewOnly ? "Show all partners" : "Show verification requests"}
+            </Button>
+          </div>
+        )}
+
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
           {/* TITLE */}
@@ -1107,7 +1151,7 @@ export function PartnerTable({
             SEARCH + FILTERS
         ==================================================== */}
 
-        <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center">
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(280px,1fr)_auto] xl:items-center">
 
           {/* SEARCH */}
 
@@ -1132,7 +1176,7 @@ export function PartnerTable({
 
           {/* FILTER GROUP */}
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center xl:flex-nowrap xl:justify-end">
 
             <div className="mr-1 hidden items-center gap-1.5 text-[11px] font-medium text-slate-400 sm:flex">
 
@@ -1150,7 +1194,7 @@ export function PartnerTable({
 
                 <Button
                   variant="outline"
-                  className="h-10 rounded-xl border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-none"
+                  className="h-10 w-full justify-between rounded-xl border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-none sm:w-auto"
                 >
 
                   {typeFilter ===
@@ -1168,8 +1212,11 @@ export function PartnerTable({
               </DropdownMenuTrigger>
 
               <DropdownMenuContent
-                align="end"
-                className="min-w-[150px]"
+                side="bottom"
+                align="start"
+                sideOffset={6}
+                collisionPadding={12}
+                className="min-w-[var(--radix-dropdown-menu-trigger-width)]"
               >
 
                 <DropdownMenuItem
@@ -1214,7 +1261,7 @@ export function PartnerTable({
 
                 <Button
                   variant="outline"
-                  className="h-10 rounded-xl border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-none"
+                  className="h-10 w-full justify-between rounded-xl border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-none sm:w-auto"
                 >
 
                   {partnerIdFilter ===
@@ -1229,7 +1276,11 @@ export function PartnerTable({
               </DropdownMenuTrigger>
 
               <DropdownMenuContent
-                align="end"
+                side="bottom"
+                align="start"
+                sideOffset={6}
+                collisionPadding={12}
+                className="min-w-[var(--radix-dropdown-menu-trigger-width)]"
               >
 
                 <DropdownMenuItem
@@ -1264,7 +1315,7 @@ export function PartnerTable({
 
                 <Button
                   variant="outline"
-                  className="h-10 rounded-xl border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-none"
+                  className="h-10 w-full justify-between rounded-xl border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-none sm:w-auto"
                 >
 
                   {statusFilter ===
@@ -1281,8 +1332,11 @@ export function PartnerTable({
               </DropdownMenuTrigger>
 
               <DropdownMenuContent
-                align="end"
-                className="min-w-[210px]"
+                side="bottom"
+                align="start"
+                sideOffset={6}
+                collisionPadding={12}
+                className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[210px]"
               >
 
                 {STATUS_OPTIONS.map(
@@ -1628,7 +1682,8 @@ export function PartnerTable({
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" className="min-w-[210px]">
                               {STATUS_OPTIONS.filter(
-                                (status): status is PartnerStatus => status !== "All"
+                                (status): status is PartnerStatus =>
+                                  status !== "All" && status !== "Information_Verified"
                               ).map((status) => (
                                 <DropdownMenuItem
                                   key={status}

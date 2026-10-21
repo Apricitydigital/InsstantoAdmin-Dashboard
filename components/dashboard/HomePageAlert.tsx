@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import Link from "next/link";
 import { getFirestoreDb } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth";
 
 import {
   Dialog,
@@ -33,7 +34,15 @@ import {
   Clock,
   CreditCard,
   Crown,
+  UserCheck,
 } from "lucide-react";
+
+const PARTNER_REVIEW_STATUSES = new Set([
+  "DocumentsUploaded",
+  "RegistrationFormFilled",
+  "Information_Unverified",
+  "Id_Generated",
+]);
 
 type AlertItem = {
   id: string;
@@ -88,6 +97,7 @@ function getComplaintHistoryText(history: unknown) {
 
 export default function HomePageAlert() {
   const db = getFirestoreDb();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
 
   const [bookings, setBookings] = useState(0);
@@ -95,6 +105,7 @@ export default function HomePageAlert() {
   const [reviews, setReviews] = useState(0);
   const [payments, setPayments] = useState(0);
   const [subscriptions, setSubscriptions] = useState(0);
+  const [partnerRequests, setPartnerRequests] = useState(0);
 
   const [latestBookings, setLatestBookings] = useState<AlertItem[]>([]);
   const [latestComplaints, setLatestComplaints] = useState<AlertItem[]>([]);
@@ -103,6 +114,7 @@ export default function HomePageAlert() {
   const [latestSubscriptions, setLatestSubscriptions] = useState<AlertItem[]>(
     []
   );
+  const [latestPartnerRequests, setLatestPartnerRequests] = useState<AlertItem[]>([]);
 
   useEffect(() => {
     let bookingCount = 0;
@@ -110,6 +122,7 @@ export default function HomePageAlert() {
     let reviewCount = 0;
     let paymentCount = 0;
     let subscriptionCount = 0;
+    let partnerRequestCount = 0;
 
     const openIfNeeded = () => {
       if (
@@ -118,6 +131,7 @@ export default function HomePageAlert() {
         reviewCount > 0 ||
         paymentCount > 0 ||
         subscriptionCount > 0
+        || partnerRequestCount > 0
       ) {
         setOpen(true);
       }
@@ -329,16 +343,74 @@ export default function HomePageAlert() {
       openIfNeeded();
     });
 
+    let providerPartners: typeof latestPartnerRequests = [];
+    let agencyPartners: typeof latestPartnerRequests = [];
+    const rebuildPartnerRequests = () => {
+      const unique = new Map<string, AlertItem>();
+      [...providerPartners, ...agencyPartners].forEach((item) => unique.set(item.id, item));
+      const items = [...unique.values()].sort(
+        (first, second) => (second.createdAt?.getTime() || 0) - (first.createdAt?.getTime() || 0)
+      );
+      partnerRequestCount = items.length;
+      setPartnerRequests(items.length);
+      setLatestPartnerRequests(items.slice(0, 5));
+      openIfNeeded();
+    };
+
+    const mapPartnerRequests = (snap: any) => snap.docs
+      .map((partnerDocument: any) => {
+        const data = partnerDocument.data();
+        const status = String(data.partner_status || "Information_Unverified");
+        if (!PARTNER_REVIEW_STATUSES.has(status)) return null;
+        return {
+          id: partnerDocument.id,
+          title: data.display_name || data.customer_name || "New partner registration",
+          subtitle: ["unverified", "rejected"].includes(String(data.kyc_status || "").toLowerCase())
+            ? "Documents were marked unverified and require correction"
+            : status === "DocumentsUploaded"
+              ? "Documents uploaded and ready for verification"
+              : `Registration status: ${status.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2")}`,
+          createdAt: getTimestampDate(data.updated_at)
+            || getTimestampDate(data.created_time)
+            || getTimestampDate(data.createdAt),
+        } as AlertItem;
+      })
+      .filter(Boolean);
+
+    let unsubProviders = () => {};
+    let unsubAgencies = () => {};
+    if (user?.role === "superadmin") {
+      unsubProviders = onSnapshot(
+        query(collection(db, "customer"), where("userType.provider", "==", true)),
+        (snap) => {
+          providerPartners = mapPartnerRequests(snap);
+          rebuildPartnerRequests();
+        }
+      );
+      unsubAgencies = onSnapshot(
+        query(collection(db, "customer"), where("userType.AgencyPartner", "==", true)),
+        (snap) => {
+          agencyPartners = mapPartnerRequests(snap);
+          rebuildPartnerRequests();
+        }
+      );
+    } else {
+      setPartnerRequests(0);
+      setLatestPartnerRequests([]);
+    }
+
     return () => {
       unsubBookings();
       unsubComplaints();
       unsubReviews();
       unsubPayments();
       unsubSubscriptions();
+      unsubProviders();
+      unsubAgencies();
     };
-  }, [db]);
+  }, [db, user?.role]);
 
-  const totalAlerts = bookings + complaints + reviews + payments + subscriptions;
+  const totalAlerts = bookings + complaints + reviews + payments + subscriptions + partnerRequests;
 
   const highestPriority = useMemo(() => {
     if (complaints > 0) {
@@ -348,6 +420,14 @@ export default function HomePageAlert() {
           complaints > 1 ? "s" : ""
         } need attention.`,
         color: "destructive" as const,
+      };
+    }
+
+    if (partnerRequests > 0) {
+      return {
+        label: "Verification required",
+        message: `${partnerRequests} partner registration or document submission${partnerRequests > 1 ? "s" : ""} need superadmin review.`,
+        color: "default" as const,
       };
     }
 
@@ -392,25 +472,13 @@ export default function HomePageAlert() {
     }
 
     return null;
-  }, [bookings, complaints, reviews, payments, subscriptions]);
+  }, [bookings, complaints, reviews, payments, subscriptions, partnerRequests]);
 
   if (totalAlerts === 0) {
     return null;
   }
 
   const alertCards = [
-    {
-      key: "bookings",
-      title: "Pending Bookings",
-      count: bookings,
-      icon: Calendar,
-      iconClass: "text-blue-600",
-      bgClass: "bg-blue-50",
-      borderClass: "border-blue-200",
-      items: latestBookings,
-      actionLabel: "View bookings",
-      path: "/bookings",
-    },
     {
       key: "complaints",
       title: "Open Complaints",
@@ -422,6 +490,30 @@ export default function HomePageAlert() {
       items: latestComplaints,
       actionLabel: "View complaints",
       path: "/support?tab=tickets&status=open",
+    },
+    {
+      key: "partners",
+      title: "Partner Verification Requests",
+      count: partnerRequests,
+      icon: UserCheck,
+      iconClass: "text-amber-700",
+      bgClass: "bg-amber-50",
+      borderClass: "border-amber-200",
+      items: latestPartnerRequests,
+      actionLabel: "Review partners",
+      path: "/partners",
+    },
+    {
+      key: "bookings",
+      title: "Pending Bookings",
+      count: bookings,
+      icon: Calendar,
+      iconClass: "text-blue-600",
+      bgClass: "bg-blue-50",
+      borderClass: "border-blue-200",
+      items: latestBookings,
+      actionLabel: "View bookings",
+      path: "/bookings",
     },
     {
       key: "reviews",
@@ -493,14 +585,7 @@ export default function HomePageAlert() {
           </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-xl border p-3">
-            <div className="break-words text-xs text-muted-foreground">
-              Pending Bookings
-            </div>
-            <div className="mt-1 text-2xl font-bold">{bookings}</div>
-          </div>
-
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <div className="rounded-xl border p-3">
             <div className="break-words text-xs text-muted-foreground">
               Open Complaints
@@ -508,6 +593,24 @@ export default function HomePageAlert() {
             <div className="mt-1 text-2xl font-bold text-red-600">
               {complaints}
             </div>
+          </div>
+
+          {user?.role === "superadmin" && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <div className="break-words text-xs text-amber-800">
+                Partner Verification
+              </div>
+              <div className="mt-1 text-2xl font-bold text-amber-800">
+                {partnerRequests}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl border p-3">
+            <div className="break-words text-xs text-muted-foreground">
+              Pending Bookings
+            </div>
+            <div className="mt-1 text-2xl font-bold">{bookings}</div>
           </div>
 
           <div className="rounded-xl border p-3">
