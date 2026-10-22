@@ -81,6 +81,7 @@ type PartnerDoc = {
   total_reviews?: number
   completedBookings?: number
   totalBookings?: number
+  serviceHubNames?: string[]
 }
 
 type WalletDoc = {
@@ -728,6 +729,38 @@ const generateAISummary = async () => {
                             </p>
                           </div>
                         </div>
+
+{/* Partner Assigned Hubs */}
+<div className="flex items-start gap-3">
+  <Building2 className="w-4 h-4 text-muted-foreground mt-1" />
+
+  <div className="flex-1">
+    <p className="text-sm font-medium">
+      Assigned Service Hubs
+    </p>
+
+    {Array.isArray(partner.serviceHubNames) &&
+    partner.serviceHubNames.length > 0 ? (
+      <div className="flex flex-wrap gap-2 mt-2">
+        {partner.serviceHubNames.map((hub, index) => (
+          <Badge
+            key={`${hub}-${index}`}
+            variant="outline"
+            className="bg-blue-50 text-blue-700 border-blue-200"
+          >
+            <MapPin className="w-3 h-3 mr-1" />
+            {hub}
+          </Badge>
+        ))}
+      </div>
+    ) : (
+      <p className="text-sm text-muted-foreground mt-1">
+        No hubs assigned
+      </p>
+    )}
+  </div>
+</div>
+
                       </div>
                     </div>
 
