@@ -18,6 +18,7 @@ import { cacheCustomerNavigationPreview } from "@/lib/customer-navigation-cache"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -61,7 +62,7 @@ export function SubscriptionTable() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "expired">("all")
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [navigatingCustomerId, setNavigatingCustomerId] = useState<string | null>(null)
 
@@ -181,10 +182,11 @@ export function SubscriptionTable() {
     }
 
     // Apply status filter
-    if (statusFilter === "active") {
-      results = results.filter((sub) => sub.Status?.toLowerCase() === "active")
-    } else if (statusFilter === "expired") {
-      results = results.filter((sub) => sub.Status?.toLowerCase() !== "active")
+    if (statusFilter.length > 0) {
+      results = results.filter((sub) => {
+        const status = sub.Status?.toLowerCase() === "active" ? "active" : "expired"
+        return statusFilter.includes(status)
+      })
     }
 
     return results
@@ -267,15 +269,14 @@ export function SubscriptionTable() {
             />
           </div>
           <div className="relative">
-            <select
+            <MultiSelectFilter
+              aria-label="Filter subscriptions by status"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "expired")}
-              className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="expired">Expired</option>
-            </select>
+              onValueChange={setStatusFilter}
+              allLabel="All statuses"
+              options={[{ value: "active", label: "Active" }, { value: "expired", label: "Expired" }]}
+              className="w-full sm:w-44"
+            />
           </div>
         </div>
       </CardHeader>
@@ -316,7 +317,7 @@ export function SubscriptionTable() {
                     <TableRow>
                       <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-8">
                         {filteredSubscriptions.length === 0 ? (
-                          search || statusFilter !== "all" ?
+                          search || statusFilter.length > 0 ?
                             "No subscriptions found matching your criteria." :
                             "No subscriptions found."
                         ) : (

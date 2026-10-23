@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 import {
   Table,
   TableBody,
@@ -51,6 +52,7 @@ import { DetailsSheet } from "@/components/bookings/booking-component"
 
 // ✅ import from partner.ts
 import { getOnboardedPartnerIdSet } from "@/lib/queries/partners"
+import { resolveCartServiceCategory } from "@/lib/queries/booking-categories"
 
 // ---------- Types ----------
 type BookingDoc = {
@@ -75,6 +77,7 @@ type PartnerOption = PartyInfo & {
   ref: DocumentReference<DocumentData>
 }
 type ServiceMap = Record<string, string[]>
+type CategoryMap = Record<string, string[]>
 type SortField = "bookingDate" | "timeSlot"
 
 const PAGE_SIZE = 20
@@ -157,13 +160,14 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const [customerMap, setCustomerMap] = useState<Record<string, PartyInfo>>({})
   const [providerMap, setProviderMap] = useState<Record<string, PartyInfo>>({})
   const [servicesMap, setServicesMap] = useState<ServiceMap>({})
+  const [categoryMap, setCategoryMap] = useState<CategoryMap>({})
   const [onboardedPartnerIds, setOnboardedPartnerIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>("")
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [bookingTypeFilter, setBookingTypeFilter] = useState("real")
-  const [revenueFilter, setRevenueFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [bookingTypeFilter, setBookingTypeFilter] = useState<string[]>(["real"])
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([])
   const [sortField, setSortField] = useState<SortField>("bookingDate")
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedBooking, setSelectedBooking] = useState<BookingDoc | null>(null)
@@ -305,6 +309,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
   const fetchServicesInfo = async (bookingDocs: BookingDoc[]) => {
     try {
       const servicesInfo: ServiceMap = {}
+      const categoriesInfo: CategoryMap = {}
 
       const uniqueCartRefs = Array.from(new Map(
         bookingDocs.flatMap((booking) => {
@@ -323,13 +328,23 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       )
 
       const namesByCartRef = new Map<string, string[]>()
-      cartSnapshots.forEach((snapshot) => snapshot.forEach((cartDocument) => {
+      const categoriesByCartRef = new Map<string, string[]>()
+      const cartDocuments = cartSnapshots.flatMap((snapshot) => snapshot.docs)
+
+      await Promise.all(cartDocuments.map(async (cartDocument) => {
         const data = cartDocument.data()
         const key = referenceKey(data.subCategoryCartId)
         if (!key) return
         const names = namesByCartRef.get(key) || []
         names.push(data.service_name || data.serviceName || "Unknown Service")
         namesByCartRef.set(key, names)
+
+        const categoryName = await resolveCartServiceCategory(data)
+        if (categoryName) {
+          const categories = categoriesByCartRef.get(key) || []
+          if (!categories.includes(categoryName)) categories.push(categoryName)
+          categoriesByCartRef.set(key, categories)
+        }
       }))
 
       bookingDocs.forEach((booking) => {
@@ -339,10 +354,15 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
         const names = refs.flatMap((ref: unknown) =>
           namesByCartRef.get(referenceKey(ref)) || []
         )
+        const categories = Array.from(new Set(refs.flatMap((ref: unknown) =>
+          categoriesByCartRef.get(referenceKey(ref)) || []
+        )))
         servicesInfo[booking.id] = names.length > 0 ? names : ["Unknown Service"]
+        categoriesInfo[booking.id] = categories.length > 0 ? categories : ["Uncategorized"]
       })
 
       setServicesMap((prev) => ({ ...prev, ...servicesInfo }))
+      setCategoryMap((prev) => ({ ...prev, ...categoriesInfo }))
     } catch (error) {
       console.error("Error fetching services info:", error)
     }
@@ -373,11 +393,18 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [allBookings])
 
+  const categoryOptions = useMemo(() =>
+    Array.from(new Set(Object.values(categoryMap).flat().filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b))
+      .map((category) => ({ value: category, label: category })),
+  [categoryMap])
+
   const filteredBookings = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
 
     const matchingBookings = allBookings.filter((b) => {
       const services = servicesMap[b.id]?.join(" ") || ""
+      const categories = categoryMap[b.id] || []
       const cust = customerMap[b.customer_id?.path ?? ""] || {}
       const prov = providerMap[b.provider_id?.path ?? ""] || {}
 
@@ -389,7 +416,8 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
         (!providerId || onboardedPartnerIds.has(providerId))
 
       const matchesBookingType =
-        bookingTypeFilter === "all" || isRealBooking
+        bookingTypeFilter.length === 0 ||
+        bookingTypeFilter.includes(isRealBooking ? "real" : "internal")
 
       const text = [
         b.id,
@@ -398,6 +426,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
         cust.phone,
         prov.phone,
         services,
+        categories.join(" "),
         b.status,
         b.bookingAddress,
         b.city,
@@ -407,18 +436,11 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
 
       const matchesSearch = !term || text.includes(term)
       const matchesStatus =
-        statusFilter === "all" || normalizeStatus(b.status) === statusFilter
-      const paidAmount = toAmount(b.amount_paid)
-      const walletAmount = toAmount(b.walletAmountUsed)
-      const netRevenue = paidAmount
-      const hasNegativeRevenue = netRevenue < 0
-      const isFullyWalletPaid = walletAmount > 0 && Math.abs(paidAmount - walletAmount) < 0.01
-      const matchesRevenue = revenueFilter === "all"
-        || (revenueFilter === "issues" && (hasNegativeRevenue || isFullyWalletPaid))
-        || (revenueFilter === "negative" && hasNegativeRevenue)
-        || (revenueFilter === "wallet_equal" && isFullyWalletPaid)
+        statusFilter.length === 0 || statusFilter.includes(normalizeStatus(b.status))
+      const matchesCategory =
+        categoryFilter.length === 0 || categories.some((category) => categoryFilter.includes(category))
 
-      return matchesBookingType && matchesSearch && matchesStatus && matchesRevenue
+      return matchesBookingType && matchesSearch && matchesStatus && matchesCategory
     })
 
     return matchingBookings.sort((a, b) => {
@@ -438,10 +460,11 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
     searchTerm,
     statusFilter,
     bookingTypeFilter,
-    revenueFilter,
+    categoryFilter,
     customerMap,
     providerMap,
     servicesMap,
+    categoryMap,
     sortField,
     onboardedPartnerIds,
   ])
@@ -457,7 +480,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, bookingTypeFilter, revenueFilter, sortField])
+  }, [searchTerm, statusFilter, bookingTypeFilter, categoryFilter, sortField])
 
   const statusColors: Record<string, string> = {
     pending: "bg-orange-100 text-orange-800",
@@ -473,9 +496,9 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
 
   const resetTableFilters = () => {
     setSearchTerm("")
-    setStatusFilter("all")
-    setBookingTypeFilter("real")
-    setRevenueFilter("all")
+    setStatusFilter([])
+    setBookingTypeFilter(["real"])
+    setCategoryFilter([])
     setSortField("bookingDate")
   }
 
@@ -734,55 +757,46 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
           <div className="mb-2 flex items-center justify-between gap-3"><p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><Filter className="h-4 w-4" />Filters</p><Button variant="ghost" size="sm" onClick={resetTableFilters} className="h-8 text-xs"><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Reset</Button></div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
 
-            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Booking type</span><div className="relative">
-              <select
+            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Booking type</span>
+              <MultiSelectFilter
                 aria-label="Booking type"
                 value={bookingTypeFilter}
-                onChange={(event) => setBookingTypeFilter(event.target.value)}
-                className="h-10 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="real">Real Booking</option>
-                <option value="all">All Bookings</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
-            </div></label>
+                onValueChange={setBookingTypeFilter}
+                options={[
+                  { value: "real", label: "Real bookings" },
+                  { value: "internal", label: "Internal/test bookings" },
+                ]}
+                allLabel="All bookings"
+              />
+            </label>
 
-            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Status</span><div className="relative">
-              <select
+            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Status</span>
+              <MultiSelectFilter
                 aria-label="Booking status"
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="h-10 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="all">All Status</option>
-                {statusOptions.map((status) => (
-                  <option key={status.value} value={status.value}>{status.label}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
-            </div></label>
+                onValueChange={setStatusFilter}
+                options={statusOptions}
+                allLabel="All statuses"
+              />
+            </label>
 
-            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Revenue</span><div className="relative">
-              <select
-                aria-label="Booking revenue"
-                value={revenueFilter}
-                onChange={(event) => setRevenueFilter(event.target.value)}
-                className="h-10 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="all">All Revenue</option>
-                <option value="issues">Revenue Issues</option>
-                <option value="negative">Negative Revenue</option>
-                <option value="wallet_equal">Amount = Wallet</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
-            </div></label>
+            <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Service category</span>
+              <MultiSelectFilter
+                aria-label="Filter bookings by service category"
+                value={categoryFilter}
+                onValueChange={setCategoryFilter}
+                options={categoryOptions}
+                allLabel="All service categories"
+                disabled={loading || categoryOptions.length === 0}
+              />
+            </label>
 
             <label className="space-y-1"><span className="text-[11px] font-medium text-slate-500">Sort by</span><div className="relative">
               <select
                 aria-label="Sort bookings by"
                 value={sortField}
                 onChange={(event) => setSortField(event.target.value as SortField)}
-                className="h-10 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 w-full appearance-none rounded-md border border-input bg-white px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="bookingDate">Booking Date (Newest First)</option>
                 <option value="timeSlot">Time Slot (Latest First)</option>

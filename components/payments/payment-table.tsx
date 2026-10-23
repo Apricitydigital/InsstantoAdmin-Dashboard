@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Search, FileX } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -24,7 +25,7 @@ type RecordType = {
 
 export default function PaymentTable({ records }: { records: RecordType[] }) {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
@@ -67,10 +68,10 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
         (r.customer.contact || "").includes(search);
 
       const matchesStatus =
-        statusFilter === "ALL" ||
-        r.status === statusFilter ||
-        displayStatus === statusFilter ||
-        (statusFilter === "REFUNDED" && r.type === "REFUND");
+        statusFilter.length === 0 ||
+        statusFilter.includes(r.status) ||
+        statusFilter.includes(displayStatus) ||
+        (statusFilter.includes("REFUNDED") && r.type === "REFUND");
 
       return matchesSearch && matchesStatus;
     });
@@ -103,7 +104,7 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div className="flex gap-2 w-full md:w-auto">
+        <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto md:items-center">
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
             <input
@@ -114,29 +115,31 @@ export default function PaymentTable({ records }: { records: RecordType[] }) {
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              className="border pl-8 pr-3 py-1 rounded w-full"
+              className="h-9 w-full rounded-md border px-3 pl-8 text-sm"
             />
           </div>
 
-          <select
+          <MultiSelectFilter
+            aria-label="Filter payment records by status"
             value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
+            onValueChange={(value) => {
+              setStatusFilter(value);
               setCurrentPage(1);
             }}
-            className="border px-3 py-1 rounded"
-          >
-            <option value="ALL">All</option>
-            <option value="CAPTURED">Captured</option>
-            <option value="FAILED">Failed</option>
-            <option value="REFUNDED">Refunded</option>
-            <option value="FULL REFUND">Full Refund</option>
-            <option value="PARTIAL REFUND">Partial Refund</option>
-            <option value="SETTLEMENT">Settlements</option>
-          </select>
+            allLabel="All statuses"
+            options={[
+              { value: "CAPTURED", label: "Captured" },
+              { value: "FAILED", label: "Failed" },
+              { value: "REFUNDED", label: "Refunded" },
+              { value: "FULL REFUND", label: "Full refund" },
+              { value: "PARTIAL REFUND", label: "Partial refund" },
+              { value: "SETTLEMENT", label: "Settlements" },
+            ]}
+            className="w-full md:w-48"
+          />
         </div>
 
-        <Button onClick={handleExport}>Export</Button>
+        <Button onClick={handleExport} className="h-9">Export</Button>
       </div>
 
       <div className="hidden md:block overflow-x-auto border rounded-md bg-white">

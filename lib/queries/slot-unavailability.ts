@@ -68,12 +68,14 @@ export function parseEvent(id: string, data: DocumentData): SlotUnavailabilityEv
     cityName: "", categoryName: "", categoryId: "", hubName: "", serviceName: "",
   }
 }
-export type EventFilters = Partial<Record<"serviceCoverageCityId" | "categoryPath" | "hubPath" | "subCategoryId" | "reasonCode" | "source" | "platform" | "outcome", string>>
+export type EventFilters = Partial<Record<"serviceCoverageCityId" | "categoryPath" | "hubPath" | "subCategoryId" | "reasonCode" | "source" | "platform" | "outcome", string | string[]>>
 export const categoryPath = (e: SlotUnavailabilityEvent) => `${e.serviceCoverageCityId}/${e.serviceCoverageCategoryId}`
 export const hubPath = (e: SlotUnavailabilityEvent) => `${categoryPath(e)}/${e.serviceHubId}`
 export function filterEvents(events: SlotUnavailabilityEvent[], filters: EventFilters) {
-  return events.filter(e => Object.entries(filters).every(([key, value]) => !value ||
-    (key === "categoryPath" ? categoryPath(e) : key === "hubPath" ? hubPath(e) : e[key as keyof SlotUnavailabilityEvent]) === value))
+  return events.filter(e => Object.entries(filters).every(([key, selected]) => {
+    const values = Array.isArray(selected) ? selected : selected ? [selected] : []
+    return values.length === 0 || values.includes(String(key === "categoryPath" ? categoryPath(e) : key === "hubPath" ? hubPath(e) : e[key as keyof SlotUnavailabilityEvent]))
+  }))
 }
 export function groupEvents(events: SlotUnavailabilityEvent[]) {
   const groups = new Map<string, { key: string; event: SlotUnavailabilityEvent; count: number; reasons: Record<string, number>; last: Date | null; schedules: number; mismatches: number; leadTime: number }>()

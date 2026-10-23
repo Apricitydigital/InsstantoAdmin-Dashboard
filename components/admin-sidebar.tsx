@@ -21,10 +21,10 @@ const navigation = [
   { name: "Slot Visits & Availability", href: "/slot-availability", icon: Calendar, permissions: ["analytics:view"] },
   { name: "Services & coverage", href: "/services", icon: Wrench, permissions: ["services:view"] },
   { name: "Complaints & support", href: "/support", icon: MessageSquare, permissions: ["complaints:view"] },
-  { name: "AI data assistant", href: "/chatbot", icon: Bot, permissions: ["chatbot:view"] },
+  { name: "AI data assistant", href: "/chatbot", icon: Bot, permissions: ["chatbot:view"], hidden: true },
   { name: "Store", href: "/store", icon: ShoppingBag, permissions: ["store:view"] },
   {
-    name: "Analytics", href: "/analytics", icon: BarChart3, permissions: ["analytics:view"],
+    name: "Analytics", href: "/analytics", icon: BarChart3, permissions: ["analytics:view"], hidden: true,
     children: [
       { name: "Revenue", href: "/analytics/revenue" },
       { name: "Operations", href: "/analytics/operations" },
@@ -49,6 +49,7 @@ export function AdminSidebar({ className }: SidebarProps) {
   const prefetchedRoutes = useRef(new Set<string>())
 
   const visibleNavigation = navigation.filter((item) => {
+    if (item.hidden) return false
     if (item.superadminOnly) return user?.role === "superadmin"
     return user?.role === "superadmin" || item.permissions?.some((permission) => hasPermission(permission))
   })

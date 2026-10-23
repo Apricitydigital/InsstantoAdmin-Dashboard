@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Calendar,
@@ -98,7 +98,7 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
   
   // Purchase filters and pagination
   const [purchaseSearchTerm, setPurchaseSearchTerm] = useState("")
-  const [purchaseStatusFilter, setPurchaseStatusFilter] = useState("all")
+  const [purchaseStatusFilter, setPurchaseStatusFilter] = useState<string[]>([])
   const [purchaseCurrentPage, setPurchaseCurrentPage] = useState(1)
 
   // Spend filters and pagination
@@ -539,7 +539,7 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
         .join(" ")
 
       const matchesSearch = !term || text.includes(term)
-      const matchesStatus = purchaseStatusFilter === "all" || record.status?.toLowerCase() === purchaseStatusFilter.toLowerCase()
+      const matchesStatus = purchaseStatusFilter.length === 0 || purchaseStatusFilter.includes(record.status?.toLowerCase() || "")
 
       return matchesSearch && matchesStatus
     })
@@ -816,19 +816,13 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
             </div>
             <div className="flex items-center space-x-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
-              <Select value={purchaseStatusFilter} onValueChange={setPurchaseStatusFilter}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="success">Success</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter aria-label="Filter credit purchases by status" value={purchaseStatusFilter} onValueChange={setPurchaseStatusFilter} allLabel="All statuses" options={[
+                { value: "completed", label: "Completed" },
+                { value: "success", label: "Success" },
+                { value: "pending", label: "Pending" },
+                { value: "failed", label: "Failed" },
+                { value: "active", label: "Active" },
+              ]} className="w-[160px]" />
             </div>
           </div>
 
@@ -841,7 +835,7 @@ export function CustomerCreditsTab({ customerId }: CustomerCreditsTabProps) {
             <div className="text-center py-8">
               <Receipt className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-muted-foreground">
-                {purchaseSearchTerm || purchaseStatusFilter !== "all" 
+                {purchaseSearchTerm || purchaseStatusFilter.length > 0
                   ? "No purchase records found matching your criteria." 
                   : "No purchase records found."}
               </p>

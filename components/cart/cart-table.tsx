@@ -14,6 +14,7 @@ import { getFirestoreDb } from "@/lib/firebase"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
@@ -67,8 +68,8 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">("all")
-  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
 
   // ---------- Helpers ----------
@@ -318,14 +319,12 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
       const status = normalize(c.cartStatus)
 
       const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "paid" && status === "paid") ||
-        (statusFilter === "unpaid" && status === "unpaid")
+        statusFilter.length === 0 || statusFilter.includes(status)
 
       if (!matchesStatus) return false
 
       const category = categoryMap[c.id] || ""
-      if (categoryFilter !== "all" && category !== categoryFilter) return false
+      if (categoryFilter.length > 0 && !categoryFilter.includes(category)) return false
 
       const customerKey =
         c.customer_id && typeof c.customer_id === "object" && "path" in c.customer_id
@@ -456,38 +455,29 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
 
-              <select
+              <MultiSelectFilter
                 aria-label="Filter cart services by status"
                 value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value as "all" | "paid" | "unpaid")
-                }
-                className="h-10 w-[160px] rounded-lg border border-input bg-white px-3 text-sm text-slate-900 shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
-              >
-                <option value="all">All Status</option>
-                <option value="paid">Paid</option>
-                <option value="unpaid">Unpaid</option>
-              </select>
+                onValueChange={setStatusFilter}
+                allLabel="All statuses"
+                options={[{ value: "paid", label: "Paid" }, { value: "unpaid", label: "Unpaid" }]}
+                className="w-[160px]"
+              />
             </div>
 
-            <select
+            <MultiSelectFilter
               aria-label="Filter cart services by category"
               value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-              className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm text-slate-900 shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30 sm:w-[190px]"
-            >
-              <option value="all">All Categories</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
+              onValueChange={setCategoryFilter}
+              allLabel="All categories"
+              options={categories.map((category) => ({ value: category, label: category }))}
+              className="sm:w-[190px]"
+            />
 
             <Button
               onClick={exportCSV}
               variant="outline"
-              className="h-10 whitespace-nowrap"
+              className="h-9 whitespace-nowrap"
               disabled={filteredCart.length === 0}
             >
               <Download className="h-4 w-4 mr-2" />
@@ -532,7 +522,7 @@ export function CartTable({ fromDate, toDate }: CartTableProps) {
               ) : paginatedCart.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                    {searchTerm || statusFilter !== "all" || categoryFilter !== "all"
+                    {searchTerm || statusFilter.length > 0 || categoryFilter.length > 0
                       ? "No cart items match your filters."
                       : "No cart items found in this date range."}
                   </TableCell>

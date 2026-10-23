@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 
 import {
   Table,
@@ -109,7 +110,6 @@ const CATEGORY_LABELS: Record<ComplaintCategory, string> = {
   account_related: "Account related",
 }
 
-type CategoryFilter = "all" | ComplaintCategory
 type RepeatFilter = "all" | "only_duplicates" | "exclude_duplicates"
 
 // ============================================================
@@ -233,12 +233,12 @@ export default function SupportPage() {
   const [
     statusFilter,
     setStatusFilter,
-  ] = useState("all")
+  ] = useState<string[]>([])
 
   const [
     categoryFilter,
     setCategoryFilter,
-  ] = useState<CategoryFilter>("all")
+  ] = useState<ComplaintCategory[]>([])
 
   const [
     repeatFilter,
@@ -265,7 +265,7 @@ export default function SupportPage() {
     }
 
     if (["all", "open", "in_progress", "resolved", "closed"].includes(requestedStatus || "")) {
-      setStatusFilter(requestedStatus || "all")
+      setStatusFilter(requestedStatus === "all" ? [] : [requestedStatus!])
     }
 
     if (requestedSearch) {
@@ -659,8 +659,8 @@ export default function SupportPage() {
 
       if (
         !normalizedTerm &&
-        statusFilter === "all" &&
-        categoryFilter === "all" &&
+        statusFilter.length === 0 &&
+        categoryFilter.length === 0 &&
         repeatFilter === "all" &&
         !fromDate &&
         !toDate
@@ -677,13 +677,12 @@ export default function SupportPage() {
             )
 
           const matchesStatus =
-            statusFilter === "all" ||
-            ticket.status ===
-              statusFilter
+            statusFilter.length === 0 ||
+            statusFilter.includes(ticket.status)
 
           const matchesCategory =
-            categoryFilter === "all" ||
-            ticket.category === categoryFilter
+            categoryFilter.length === 0 ||
+            categoryFilter.includes(ticket.category)
 
           const matchesRepeatFilter =
             repeatFilter === "all" ||
@@ -967,8 +966,8 @@ export default function SupportPage() {
   const clearTicketFilters =
     useCallback(() => {
       setSearchTerm("")
-      setStatusFilter("all")
-      setCategoryFilter("all")
+      setStatusFilter([])
+      setCategoryFilter([])
       setRepeatFilter("all")
       setFromDate("")
       setToDate("")
@@ -977,8 +976,8 @@ export default function SupportPage() {
 
   const hasActiveFilters =
     Boolean(searchTerm.trim()) ||
-    statusFilter !== "all" ||
-    categoryFilter !== "all" ||
+    statusFilter.length > 0 ||
+    categoryFilter.length > 0 ||
     repeatFilter !== "all" ||
     Boolean(fromDate) ||
     Boolean(toDate)
@@ -1233,24 +1232,17 @@ export default function SupportPage() {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <label className="min-w-0 text-xs font-medium text-gray-600">
                       Category
-                      <select
+                      <MultiSelectFilter
                         aria-label="Filter complaints by category"
                         value={categoryFilter}
-                        onChange={(event) => {
-                          setCategoryFilter(event.target.value as CategoryFilter)
+                        onValueChange={(value) => {
+                          setCategoryFilter(value as ComplaintCategory[])
                           setCurrentPageTickets(1)
                         }}
-                        className="mt-1 h-10 w-full rounded-md border border-input bg-white px-3 text-sm shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
-                      >
-                        <option value="all">All Categories</option>
-                        {Object.entries(CATEGORY_LABELS).map(
-                          ([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          )
-                        )}
-                      </select>
+                        allLabel="All categories"
+                        options={Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label }))}
+                        className="mt-1"
+                      />
                     </label>
 
                     <label className="min-w-0 text-xs font-medium text-gray-600">
@@ -1262,7 +1254,7 @@ export default function SupportPage() {
                           setRepeatFilter(event.target.value as RepeatFilter)
                           setCurrentPageTickets(1)
                         }}
-                        className="mt-1 h-10 w-full rounded-md border border-input bg-white px-3 text-sm shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                        className="mt-1 h-9 w-full rounded-md border border-input bg-white px-3 text-sm shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
                       >
                         <option value="all">All complaint records</option>
                         <option value="exclude_duplicates">
@@ -1306,28 +1298,29 @@ export default function SupportPage() {
 
                     <label className="min-w-0 text-xs font-medium text-gray-600">
                       Status
-                      <select
+                      <MultiSelectFilter
                         aria-label="Filter complaints by status"
                         value={statusFilter}
-                        onChange={(event) => {
-                          setStatusFilter(event.target.value)
+                        onValueChange={(value) => {
+                          setStatusFilter(value)
                           setCurrentPageTickets(1)
                         }}
-                        className="mt-1 h-10 w-full rounded-md border border-input bg-white px-3 text-sm shadow-xs outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
-                      >
-                        <option value="all">All Status</option>
-                        <option value="open">Open</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="resolved">Resolved</option>
-                        <option value="closed">Closed</option>
-                      </select>
+                        allLabel="All statuses"
+                        options={[
+                          { value: "open", label: "Open" },
+                          { value: "in_progress", label: "In progress" },
+                          { value: "resolved", label: "Resolved" },
+                          { value: "closed", label: "Closed" },
+                        ]}
+                        className="mt-1"
+                      />
                     </label>
 
                     <div className="flex items-end">
                       <Button
                         type="button"
                         variant="ghost"
-                        className={`h-10 w-full ${
+                        className={`h-9 w-full ${
                           hasActiveFilters
                             ? ""
                             : "invisible pointer-events-none"

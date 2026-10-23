@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/lib/auth"
 import { categoryPath, DIAGNOSTICS, OUTCOMES, filterEvents, groupEvents, hubPath, REASONS, SlotUnavailabilityRepository, SOURCES, type EventFilters, type SlotUnavailabilityEvent } from "@/lib/queries/slot-unavailability"
@@ -59,14 +60,14 @@ export default function SlotAvailabilityPage() {
   const filtered = useMemo(() => filterEvents(events, filters), [events, filters])
   const grouped = useMemo(() => groupEvents(filtered), [filtered])
   const pages = Math.max(1, Math.ceil(filtered.length / 100)), current = Math.min(page, pages - 1)
-  function updateFilter(key: keyof EventFilters, value: string) {
-    setFilters(old => ({ ...old, [key]: value, ...(key === "serviceCoverageCityId" ? { categoryPath: "", hubPath: "" } : {}), ...(key === "categoryPath" ? { hubPath: "" } : {}) })); setPage(0)
+  function updateFilter(key: keyof EventFilters, value: string[]) {
+    setFilters(old => ({ ...old, [key]: value, ...(key === "serviceCoverageCityId" ? { categoryPath: [], hubPath: [] } : {}), ...(key === "categoryPath" ? { hubPath: [] } : {}) })); setPage(0)
   }
   function options(key: keyof EventFilters) {
     const values = new Map<string, string>()
     for (const e of events) {
-      if ((key === "categoryPath" || key === "hubPath") && filters.serviceCoverageCityId && e.serviceCoverageCityId !== filters.serviceCoverageCityId) continue
-      if (key === "hubPath" && filters.categoryPath && categoryPath(e) !== filters.categoryPath) continue
+      if ((key === "categoryPath" || key === "hubPath") && filters.serviceCoverageCityId?.length && !filters.serviceCoverageCityId.includes(e.serviceCoverageCityId)) continue
+      if (key === "hubPath" && filters.categoryPath?.length && !filters.categoryPath.includes(categoryPath(e))) continue
       const value = key === "categoryPath" ? categoryPath(e) : key === "hubPath" ? hubPath(e) : e[key]
       const label = key === "serviceCoverageCityId" ? e.cityName : key === "categoryPath" ? `${e.categoryName} (${e.cityName})` : key === "hubPath" ? `${e.hubName} (${e.cityName} / ${e.categoryName})` : key === "subCategoryId" ? e.serviceName : key === "reasonCode" ? reason(e.reasonCode) : key === "source" ? SOURCES[e.source] || e.source : key === "outcome" ? OUTCOMES[e.outcome] || e.outcome : e.platform
       if (value) values.set(value, label)
@@ -83,7 +84,7 @@ export default function SlotAvailabilityPage() {
     <Card><CardHeader><CardTitle>Filters</CardTitle></CardHeader><CardContent><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       <label className="space-y-2 text-sm font-medium">From<Input type="date" value={range.from} max={range.to} onChange={e => { setFilters({}); setRange(r => ({ ...r, from: e.target.value })) }} /></label>
       <label className="space-y-2 text-sm font-medium">Through<Input type="date" value={range.to} min={range.from} onChange={e => { setFilters({}); setRange(r => ({ ...r, to: e.target.value })) }} /></label>
-      {definitions.map(([key, label]) => <label key={key} className="space-y-2 text-sm font-medium">{label}<select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={filters[key] || ""} onChange={e => updateFilter(key, e.target.value)} disabled={loading}><option value="">All</option>{options(key).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>)}
+      {definitions.map(([key, label]) => <label key={key} className="space-y-2 text-sm font-medium">{label}<MultiSelectFilter aria-label={`Filter by ${label}`} value={Array.isArray(filters[key]) ? filters[key] : filters[key] ? [filters[key] as string] : []} onValueChange={value => updateFilter(key, value)} options={options(key).map(([value, name]) => ({ value, label: name }))} allLabel={`All ${label.toLowerCase()}`} disabled={loading} /></label>)}
       <div className="flex items-end"><Button variant="outline" onClick={() => { setRange(defaultRange()); setFilters({}); setPage(0) }}>Reset to last 7 days</Button></div>
     </div><p className="mt-3 text-xs text-muted-foreground">Dates use your browser’s local timezone. Summaries respect all filters. Filter choices come from events in this range.</p></CardContent></Card>
     {loading ? <div role="status" className="flex items-center justify-center gap-3 p-12"><Loader2 className="h-5 w-5 animate-spin" />Loading availability events ({loaded.toLocaleString()} read)…</div> : error ? <div role="alert" className="rounded-lg border border-destructive p-5"><p className="font-semibold">Could not load availability issues</p><p className="mt-2 break-words text-sm">{error}</p><p className="mt-2 text-sm text-muted-foreground">If access is denied, check that the updated Firestore rules are deployed and your account has analytics access.</p><Button variant="outline" className="mt-3" onClick={() => setRefresh(v => v + 1)}>Retry</Button></div> : <>

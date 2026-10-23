@@ -18,6 +18,7 @@ import { cacheCustomerNavigationPreview } from "@/lib/customer-navigation-cache"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -59,7 +60,7 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
-  const [bookingFilter, setBookingFilter] = useState<"all" | "0" | "1" | "2" | "2plus">("all")
+  const [bookingFilter, setBookingFilter] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [navigatingCustomerId, setNavigatingCustomerId] = useState<string | null>(null)
 
@@ -208,10 +209,13 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
     }
 
     // Booking filters
-    if (bookingFilter === "0") results = results.filter((c) => c.bookingCount === 0)
-    else if (bookingFilter === "1") results = results.filter((c) => c.bookingCount === 1)
-    else if (bookingFilter === "2") results = results.filter((c) => c.bookingCount === 2)
-    else if (bookingFilter === "2plus") results = results.filter((c) => c.bookingCount! >= 3)
+    if (bookingFilter.length > 0) {
+      results = results.filter((customer) => {
+        const count = customer.bookingCount || 0
+        const bucket = count >= 3 ? "2plus" : String(count)
+        return bookingFilter.includes(bucket)
+      })
+    }
 
     return results
   }, [allCustomers, search, bookingFilter])
@@ -346,13 +350,12 @@ export function CustomerTable({ fromDate, toDate }: CustomerTableProps) {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input placeholder="Search name, email, phone or UID" value={search} onChange={(event) => setSearch(event.target.value)} className="bg-slate-50 pl-9" />
           </div>
-          <select value={bookingFilter} onChange={(event) => setBookingFilter(event.target.value as typeof bookingFilter)} className="h-10 rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring">
-            <option value="all">All booking activity</option>
-            <option value="0">0 bookings</option>
-            <option value="1">1 booking</option>
-            <option value="2">2 bookings</option>
-            <option value="2plus">3+ bookings</option>
-          </select>
+          <MultiSelectFilter aria-label="Filter customers by booking activity" value={bookingFilter} onValueChange={setBookingFilter} allLabel="All booking activity" options={[
+            { value: "0", label: "0 bookings" },
+            { value: "1", label: "1 booking" },
+            { value: "2", label: "2 bookings" },
+            { value: "2plus", label: "3+ bookings" },
+          ]} className="lg:w-52" />
           <Button variant="outline" onClick={exportCSV}><Download className="mr-2 h-4 w-4" />CSV</Button>
           <Button variant="outline" onClick={exportExcel}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</Button>
         </div>

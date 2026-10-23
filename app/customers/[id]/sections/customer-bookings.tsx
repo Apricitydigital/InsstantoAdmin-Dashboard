@@ -17,7 +17,6 @@ import {
   AlertCircle,
   Calendar,
   CheckCircle,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -32,6 +31,7 @@ import { DetailsSheet } from "@/components/bookings/booking-component"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 import {
   Table,
   TableBody,
@@ -109,8 +109,7 @@ export function CustomerBookingsTab({ customerId }: CustomerBookingsTabProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [revenueFilter, setRevenueFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedBooking, setSelectedBooking] = useState<BookingDoc | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -301,12 +300,6 @@ export function CustomerBookingsTab({ customerId }: CustomerBookingsTabProps) {
       const customer = customerMap[getReferencePath(booking.customer_id)] || {}
       const provider = providerMap[getReferencePath(booking.provider_id)] || {}
       const services = servicesMap[booking.id] || []
-      const paidAmount = toAmount(booking.amount_paid)
-      const walletAmount = toAmount(booking.walletAmountUsed)
-      const hasNegativeRevenue = paidAmount < 0
-      const isFullyWalletPaid =
-        walletAmount > 0 && Math.abs(paidAmount - walletAmount) < 0.01
-
       const searchableText = [
         booking.id,
         booking.status,
@@ -328,21 +321,14 @@ export function CustomerBookingsTab({ customerId }: CustomerBookingsTabProps) {
         .replaceAll(" ", "-")
       const matchesSearch = !term || searchableText.includes(term)
       const matchesStatus =
-        statusFilter === "all" || normalizedStatus === statusFilter
-      const matchesRevenue =
-        revenueFilter === "all" ||
-        (revenueFilter === "issues" &&
-          (hasNegativeRevenue || isFullyWalletPaid)) ||
-        (revenueFilter === "negative" && hasNegativeRevenue) ||
-        (revenueFilter === "wallet_equal" && isFullyWalletPaid)
+        statusFilter.length === 0 || statusFilter.includes(normalizedStatus)
 
-      return matchesSearch && matchesStatus && matchesRevenue
+      return matchesSearch && matchesStatus
     })
   }, [
     bookings,
     customerMap,
     providerMap,
-    revenueFilter,
     searchTerm,
     servicesMap,
     statusFilter,
@@ -356,7 +342,7 @@ export function CustomerBookingsTab({ customerId }: CustomerBookingsTabProps) {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [revenueFilter, searchTerm, statusFilter])
+  }, [searchTerm, statusFilter])
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages)
@@ -441,37 +427,21 @@ export function CustomerBookingsTab({ customerId }: CustomerBookingsTabProps) {
 
           <div className="flex flex-wrap items-center gap-2">
             <Filter className="size-4 text-muted-foreground" />
-            <div className="relative shrink-0">
-              <select
+            <div className="w-[180px] shrink-0">
+              <MultiSelectFilter
                 aria-label="Booking status"
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="h-10 w-[150px] appearance-none rounded-md border border-input bg-background px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="accepted">Accepted</option>
-                <option value="in-progress">In Progress</option>
-                <option value="service-completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
-            </div>
-
-            <div className="relative shrink-0">
-              <select
-                aria-label="Booking revenue"
-                value={revenueFilter}
-                onChange={(event) => setRevenueFilter(event.target.value)}
-                className="h-10 w-[170px] appearance-none rounded-md border border-input bg-background px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                <option value="all">All Revenue</option>
-                <option value="issues">Revenue Issues</option>
-                <option value="negative">Negative Revenue</option>
-                <option value="wallet_equal">Amount = Wallet</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+                onValueChange={setStatusFilter}
+                allLabel="All statuses"
+                options={[
+                  { value: "pending", label: "Pending" },
+                  { value: "confirmed", label: "Confirmed" },
+                  { value: "accepted", label: "Accepted" },
+                  { value: "in-progress", label: "In progress" },
+                  { value: "service-completed", label: "Completed" },
+                  { value: "cancelled", label: "Cancelled" },
+                ]}
+              />
             </div>
           </div>
         </div>
@@ -515,7 +485,7 @@ export function CustomerBookingsTab({ customerId }: CustomerBookingsTabProps) {
                 <TableCell colSpan={13} className="h-40 text-center">
                   <Calendar className="mx-auto mb-3 size-10 text-muted-foreground" />
                   <p className="text-muted-foreground">
-                    {searchTerm || statusFilter !== "all" || revenueFilter !== "all"
+                    {searchTerm || statusFilter.length > 0
                       ? "No bookings found matching your filters."
                       : "No bookings found for this customer."}
                   </p>

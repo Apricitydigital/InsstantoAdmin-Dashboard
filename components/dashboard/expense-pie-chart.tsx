@@ -17,6 +17,7 @@ import {
     CardContent,
 } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 
 const COLORS = [
     "#6366F1", "#22C55E", "#F97316", "#EC4899",
@@ -54,7 +55,7 @@ interface ExpenseData {
 
 export function ExpensePieChart({ className = "" }: { className?: string }) {
     const [months, setMonths] = useState<string[]>([]);
-    const [selectedMonth, setSelectedMonth] = useState("");
+    const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
     const [data, setData] = useState<ExpenseData[]>([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -104,9 +105,9 @@ export function ExpensePieChart({ className = "" }: { className?: string }) {
             setMonths(allMonths);
 
             const lastMonth = allMonths[allMonths.length - 1];
-            setSelectedMonth(lastMonth);
+            setSelectedMonths(lastMonth ? [lastMonth] : []);
 
-            buildChartData(rows, monthColumn, totalColumn, lastMonth);
+            buildChartData(rows, monthColumn, totalColumn, lastMonth ? [lastMonth] : []);
         } catch (err) {
             console.error("Error fetching sheet:", err);
         } finally {
@@ -119,26 +120,31 @@ export function ExpensePieChart({ className = "" }: { className?: string }) {
         rows: Record<string, string>[],
         monthColumn: string,
         totalColumn: string,
-        month: string
+        selected: string[]
     ) => {
-        const row = rows.find(r => r[monthColumn] === month);
-        if (!row) return;
+        const matchingRows = selected.length > 0
+            ? rows.filter(row => selected.includes(row[monthColumn]))
+            : rows;
+        if (!matchingRows.length) {
+            setTotal(0);
+            setData([]);
+            return;
+        }
 
-        const totalValue =
-            parseFloat(row[totalColumn]?.replace(/,/g, "")) || 0;
+        const totalValue = matchingRows.reduce((sum, row) =>
+            sum + (parseFloat(row[totalColumn]?.replace(/,/g, "")) || 0), 0);
 
         setTotal(totalValue);
 
         const chartData: ExpenseData[] = [];
 
-        Object.entries(row).forEach(([key, value]) => {
-            if (
-                key !== monthColumn &&
-                key !== totalColumn &&
-                value &&
-                !isNaN(parseFloat(value.replace(/,/g, "")))
-            ) {
-                const num = parseFloat(value.replace(/,/g, ""));
+        const values = new Map<string, number>();
+        matchingRows.forEach(row => Object.entries(row).forEach(([key, value]) => {
+            if (key !== monthColumn && key !== totalColumn && value && !isNaN(parseFloat(value.replace(/,/g, "")))) {
+                values.set(key, (values.get(key) || 0) + parseFloat(value.replace(/,/g, "")));
+            }
+        }));
+        values.forEach((num, key) => {
                 chartData.push({
                     name: key,
                     value: num,
@@ -146,18 +152,14 @@ export function ExpensePieChart({ className = "" }: { className?: string }) {
                         ? +(num / totalValue * 100).toFixed(1)
                         : 0,
                 });
-            }
         });
 
         setData(chartData);
     };
 
     /* ---------------- MONTH CHANGE ---------------- */
-    const handleMonthChange = async (
-        e: React.ChangeEvent<HTMLSelectElement>
-    ) => {
-        const month = e.target.value;
-        setSelectedMonth(month);
+    const handleMonthChange = async (selected: string[]) => {
+        setSelectedMonths(selected);
 
         const res = await fetch(sheetUrl);
         const text = await res.text();
@@ -172,7 +174,7 @@ export function ExpensePieChart({ className = "" }: { className?: string }) {
         );
 
         if (monthColumn && totalColumn) {
-            buildChartData(rows, monthColumn, totalColumn, month);
+            buildChartData(rows, monthColumn, totalColumn, selected);
         }
     };
 
@@ -193,17 +195,7 @@ export function ExpensePieChart({ className = "" }: { className?: string }) {
                     <CardDescription>Bifurcation by expense type</CardDescription>
                 </div>
 
-                <select
-                    value={selectedMonth}
-                    onChange={handleMonthChange}
-                    className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                >
-                    {months.map(m => (
-                        <option key={m} value={m}>
-                            {m}
-                        </option>
-                    ))}
-                </select>
+                <MultiSelectFilter aria-label="Filter expenses by month" value={selectedMonths} onValueChange={(value) => void handleMonthChange(value)} allLabel="All months" options={months.map(month => ({ value: month, label: month }))} className="w-48" />
             </CardHeader>
 
             <CardContent className="flex w-full flex-col items-center justify-center space-y-4 p-3 sm:p-5">
@@ -214,7 +206,7 @@ export function ExpensePieChart({ className = "" }: { className?: string }) {
                     </div>
                 ) : data.length === 0 ? (
                     <p className="text-gray-500 h-[300px]">
-                        No data available for {selectedMonth}
+                        No data available for {selectedMonths.length ? selectedMonths.join(", ") : "all months"}
                     </p>
                 ) : (
                     <>
@@ -227,7 +219,7 @@ export function ExpensePieChart({ className = "" }: { className?: string }) {
                                 </span>
                             </p>
                             <p className="text-xs text-gray-500">
-                                for {selectedMonth}
+                                for {selectedMonths.length ? selectedMonths.join(", ") : "all months"}
                             </p>
                         </div>
 

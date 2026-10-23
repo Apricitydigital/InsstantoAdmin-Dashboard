@@ -455,6 +455,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 
 import {
   Table,
@@ -585,16 +586,11 @@ export function PartnerTable({
 
   const [searchTerm, setSearchTerm] = useState("")
 
-  const [typeFilter, setTypeFilter] = useState<
-    "all" | "provider" | "agency"
-  >("all")
+  const [typeFilter, setTypeFilter] = useState<string[]>([])
 
-  const [partnerIdFilter, setPartnerIdFilter] = useState<
-    "all" | "specific"
-  >("all")
+  const [partnerIdFilter, setPartnerIdFilter] = useState<string[]>([])
 
-  const [statusFilter, setStatusFilter] =
-    useState<StatusFilter>("All")
+  const [statusFilter, setStatusFilter] = useState<PartnerStatus[]>([])
 
   const [loading, setLoading] = useState(false)
   const [updatingPartnerId, setUpdatingPartnerId] = useState<string | null>(null)
@@ -887,27 +883,14 @@ export function PartnerTable({
               )
 
           const matchesType =
-            typeFilter ===
-              "all" ||
-            (typeFilter ===
-              "provider" &&
-              partner.type ===
-                "provider") ||
-            (typeFilter ===
-              "agency" &&
-              partner.type ===
-                "agency")
+            typeFilter.length === 0 || typeFilter.includes(partner.type)
 
           const matchesPartnerIds =
-            partnerIdFilter ===
-              "all" ||
-            partner.status === ONBOARDED_PARTNER_STATUS
+            partnerIdFilter.length === 0 ||
+            (partnerIdFilter.includes("specific") && partner.status === ONBOARDED_PARTNER_STATUS)
 
           const matchesStatus =
-            statusFilter ===
-              "All" ||
-            partner.status ===
-              statusFilter
+            statusFilter.length === 0 || statusFilter.includes(partner.status as PartnerStatus)
 
           const matchesReviewQueue =
             !reviewOnly || VERIFICATION_REQUEST_STATUSES.has(partner.status)
@@ -944,16 +927,16 @@ export function PartnerTable({
 
   const hasActiveFilters =
     searchTerm !== "" ||
-    typeFilter !== "all" ||
-    partnerIdFilter !== "all" ||
-    statusFilter !== "All" ||
+    typeFilter.length > 0 ||
+    partnerIdFilter.length > 0 ||
+    statusFilter.length > 0 ||
     reviewOnly
 
   const resetFilters = () => {
     setSearchTerm("")
-    setTypeFilter("all")
-    setPartnerIdFilter("all")
-    setStatusFilter("All")
+    setTypeFilter([])
+    setPartnerIdFilter([])
+    setStatusFilter([])
     setReviewOnly(false)
   }
 
@@ -1062,7 +1045,7 @@ export function PartnerTable({
               variant={reviewOnly ? "default" : "outline"}
               onClick={() => {
                 setReviewOnly((current) => !current)
-                setStatusFilter("All")
+                setStatusFilter([])
               }}
               className="shrink-0"
             >
@@ -1187,187 +1170,40 @@ export function PartnerTable({
             </div>
 
             {/* TYPE */}
-
-            <DropdownMenu>
-
-              <DropdownMenuTrigger asChild>
-
-                <Button
-                  variant="outline"
-                  className="h-10 w-full justify-between rounded-xl border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-none sm:w-auto"
-                >
-
-                  {typeFilter ===
-                  "all"
-                    ? "All Types"
-                    : typeFilter ===
-                        "provider"
-                      ? "Provider"
-                      : "Agency"}
-
-                  <ChevronDown className="ml-2 h-3.5 w-3.5 text-slate-400" />
-
-                </Button>
-
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent
-                side="bottom"
-                align="start"
-                sideOffset={6}
-                collisionPadding={12}
-                className="min-w-[var(--radix-dropdown-menu-trigger-width)]"
-              >
-
-                <DropdownMenuItem
-                  onClick={() =>
-                    setTypeFilter(
-                      "all"
-                    )
-                  }
-                >
-                  All Types
-                </DropdownMenuItem>
-
-                <DropdownMenuItem
-                  onClick={() =>
-                    setTypeFilter(
-                      "provider"
-                    )
-                  }
-                >
-                  Provider
-                </DropdownMenuItem>
-
-                <DropdownMenuItem
-                  onClick={() =>
-                    setTypeFilter(
-                      "agency"
-                    )
-                  }
-                >
-                  Agency
-                </DropdownMenuItem>
-
-              </DropdownMenuContent>
-
-            </DropdownMenu>
+            <MultiSelectFilter
+              aria-label="Filter partners by type"
+              value={typeFilter}
+              onValueChange={setTypeFilter}
+              allLabel="All types"
+              options={[
+                { value: "provider", label: "Provider" },
+                { value: "agency", label: "Agency" },
+              ]}
+              className="h-10 rounded-xl text-xs sm:w-40"
+            />
 
             {/* PARTNER IDS */}
-
-            <DropdownMenu>
-
-              <DropdownMenuTrigger asChild>
-
-                <Button
-                  variant="outline"
-                  className="h-10 w-full justify-between rounded-xl border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-none sm:w-auto"
-                >
-
-                  {partnerIdFilter ===
-                  "all"
-                    ? "All Partners"
-                    : "Specific IDs"}
-
-                  <ChevronDown className="ml-2 h-3.5 w-3.5 text-slate-400" />
-
-                </Button>
-
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent
-                side="bottom"
-                align="start"
-                sideOffset={6}
-                collisionPadding={12}
-                className="min-w-[var(--radix-dropdown-menu-trigger-width)]"
-              >
-
-                <DropdownMenuItem
-                  onClick={() =>
-                    setPartnerIdFilter(
-                      "all"
-                    )
-                  }
-                >
-                  All Partners
-                </DropdownMenuItem>
-
-                <DropdownMenuItem
-                  onClick={() =>
-                    setPartnerIdFilter(
-                      "specific"
-                    )
-                  }
-                >
-                  Specific IDs
-                </DropdownMenuItem>
-
-              </DropdownMenuContent>
-
-            </DropdownMenu>
+            <MultiSelectFilter
+              aria-label="Filter partner IDs"
+              value={partnerIdFilter}
+              onValueChange={setPartnerIdFilter}
+              allLabel="All partners"
+              options={[{ value: "specific", label: "Specific IDs" }]}
+              className="h-10 rounded-xl text-xs sm:w-40"
+            />
 
             {/* STATUS */}
-
-            <DropdownMenu>
-
-              <DropdownMenuTrigger asChild>
-
-                <Button
-                  variant="outline"
-                  className="h-10 w-full justify-between rounded-xl border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-none sm:w-auto"
-                >
-
-                  {statusFilter ===
-                  "All"
-                    ? "All Status"
-                    : formatStatus(
-                        statusFilter
-                      )}
-
-                  <ChevronDown className="ml-2 h-3.5 w-3.5 text-slate-400" />
-
-                </Button>
-
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent
-                side="bottom"
-                align="start"
-                sideOffset={6}
-                collisionPadding={12}
-                className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[210px]"
-              >
-
-                {STATUS_OPTIONS.map(
-                  (status) => (
-
-                    <DropdownMenuItem
-                      key={
-                        status
-                      }
-                      onClick={() =>
-                        setStatusFilter(
-                          status
-                        )
-                      }
-                    >
-
-                      {status ===
-                      "All"
-                        ? "All Status"
-                        : formatStatus(
-                            status
-                          )}
-
-                    </DropdownMenuItem>
-
-                  )
-                )}
-
-              </DropdownMenuContent>
-
-            </DropdownMenu>
+            <MultiSelectFilter
+              aria-label="Filter partners by status"
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value as PartnerStatus[])}
+              allLabel="All statuses"
+              options={STATUS_OPTIONS.filter((status): status is PartnerStatus => status !== "All").map((status) => ({
+                value: status,
+                label: formatStatus(status),
+              }))}
+              className="h-10 rounded-xl text-xs sm:w-52"
+            />
 
             {/* RESET */}
 

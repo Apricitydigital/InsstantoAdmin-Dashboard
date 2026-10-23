@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 import {
@@ -31,11 +32,11 @@ import {
     Loader2,
     ChevronLeft,
     ChevronRight,
-    ChevronDown,
     Download,
     BarChart3,
 } from "lucide-react"
 import { DetailsSheet } from "@/components/bookings/booking-component"
+import { resolveCartServiceCategory } from "@/lib/queries/booking-categories"
 
 
 // ============================
@@ -87,6 +88,7 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
 
     const [bookings, setBookings] = useState<BookingDoc[]>([])
     const [servicesMap, setServicesMap] = useState<Record<string, ServiceInfo>>({})
+    const [categoryMap, setCategoryMap] = useState<Record<string, string[]>>({})
     const [customerMap, setCustomerMap] = useState<Record<string, { name: string; phone: string }>>({})
     const [loading, setLoading] = useState(true)
     const [selectedBooking, setSelectedBooking] = useState<BookingDoc | null>(null)
@@ -94,8 +96,8 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
 
     // filters
     const [searchTerm, setSearchTerm] = useState("")
-    const [statusFilter, setStatusFilter] = useState("all")
-    const [revenueFilter, setRevenueFilter] = useState("all")
+    const [statusFilter, setStatusFilter] = useState<string[]>([])
+    const [categoryFilter, setCategoryFilter] = useState<string[]>([])
     const [currentPage, setCurrentPage] = useState(1)
 
     // ==========================================================
@@ -191,10 +193,12 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
     const fetchServicesInfo = async (bookingDocs: BookingDoc[]) => {
         try {
             const servicesInfo: Record<string, string[]> = {}
+            const categoriesInfo: Record<string, string[]> = {}
 
             await Promise.all(
                 bookingDocs.map(async (booking) => {
                     const serviceNames: string[] = []
+                    const categoryNames = new Set<string>()
 
                     const cartRefs = Array.isArray(booking.subCategoryCart_id)
                         ? booking.subCategoryCart_id
@@ -210,7 +214,7 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
                             )
                             const cartSnapshot = await getDocs(cartQuery)
 
-                            cartSnapshot.forEach((cartDoc) => {
+                            await Promise.all(cartSnapshot.docs.map(async (cartDoc) => {
                                 const cartData = cartDoc.data()
                                 const serviceName =
                                     cartData.service_name ||
@@ -218,7 +222,9 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
                                     "Unknown Service"
 
                                 serviceNames.push(serviceName)
-                            })
+                                const categoryName = await resolveCartServiceCategory(cartData)
+                                if (categoryName) categoryNames.add(categoryName)
+                            }))
 
                         } catch (err) {
                             console.warn("Error querying cart:", err)
@@ -227,10 +233,14 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
 
                     servicesInfo[booking.id] =
                         serviceNames.length > 0 ? serviceNames : ["Unknown Service"]
+                    categoriesInfo[booking.id] = categoryNames.size > 0
+                        ? [...categoryNames]
+                        : ["Uncategorized"]
                 })
             )
 
             setServicesMap(servicesInfo)
+            setCategoryMap(categoriesInfo)
         } catch (error) {
             console.error("Error fetching services info:", error)
         }
@@ -311,6 +321,12 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
         return servicesMap[booking.id] || ["Unknown Service"]
     }
 
+    const categoryOptions = useMemo(() =>
+        Array.from(new Set(Object.values(categoryMap).flat().filter(Boolean)))
+            .sort((a, b) => a.localeCompare(b))
+            .map(category => ({ value: category, label: category })),
+    [categoryMap])
+
     // ==========================================================
     // JOB COUNTING LOGIC
     // ==========================================================
@@ -350,32 +366,26 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
 
         return filteredByDate.filter((booking) => {
             const services = getServicesForBooking(booking).join(" ")
+            const categories = categoryMap[booking.id] || []
             const customer = customerMap[booking.customer_id?.path] || { name: "", phone: "" }
 
             const text = [
                 booking.id,
                 booking.status,
                 services,
+                categories.join(" "),
                 booking.otp?.toString(),
                 customer.name,
                 customer.phone,
             ].map(v => (v ?? "").toString().toLowerCase()).join(" ")
 
             const matchesSearch = !term || text.includes(term)
-            const matchesStatus = statusFilter === "all" || booking.status?.toLowerCase() === statusFilter.toLowerCase()
-            const amountPaid = toAmount(booking.amount_paid)
-            const walletAmount = toAmount(booking.walletAmountUsed)
-            const netRevenue = amountPaid
-            const hasNegativeRevenue = netRevenue < 0
-            const isFullyWalletPaid = walletAmount > 0 && Math.abs(amountPaid - walletAmount) < 0.01
-            const matchesRevenue = revenueFilter === "all"
-                || (revenueFilter === "issues" && (hasNegativeRevenue || isFullyWalletPaid))
-                || (revenueFilter === "negative" && hasNegativeRevenue)
-                || (revenueFilter === "wallet_equal" && isFullyWalletPaid)
+            const matchesStatus = statusFilter.length === 0 || statusFilter.includes(booking.status?.toLowerCase() || "")
+            const matchesCategory = categoryFilter.length === 0 || categories.some(category => categoryFilter.includes(category))
 
-            return matchesSearch && matchesStatus && matchesRevenue
+            return matchesSearch && matchesStatus && matchesCategory
         })
-    }, [filteredByDate, searchTerm, statusFilter, revenueFilter, servicesMap, customerMap])
+    }, [filteredByDate, searchTerm, statusFilter, categoryFilter, servicesMap, categoryMap, customerMap])
 
     // ==========================================================
     // PAGINATION
@@ -393,7 +403,7 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
 
     useEffect(() => {
         setCurrentPage(1)
-    }, [searchTerm, statusFilter, revenueFilter, fromDate, toDate])
+    }, [searchTerm, statusFilter, categoryFilter, fromDate, toDate])
 
     const goNext = () => { if (hasNextPage) setCurrentPage(prev => prev + 1) }
     const goPrev = () => { if (hasPrevPage) setCurrentPage(prev => prev - 1) }
@@ -553,45 +563,40 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
                             </div>
                         </div>
 
-                        <div className="flex w-full items-center gap-2 md:w-auto">
+                        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
                             <Filter className="h-4 w-4 text-muted-foreground" />
-                            <div className="relative shrink-0">
-                                <select
+                            <div className="w-[180px] shrink-0">
+                                <MultiSelectFilter
                                     aria-label="Booking status"
                                     value={statusFilter}
-                                    onChange={(event) => setStatusFilter(event.target.value)}
-                                    className="border-input bg-background h-9 w-[150px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                                >
-                                    <option value="all">All Status</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="confirmed">Confirmed</option>
-                                    <option value="accepted">Accepted</option>
-                                    <option value="in-progress">In Progress</option>
-                                    <option value="service_completed">Completed</option>
-                                    <option value="cancelled">Cancelled</option>
-                                </select>
-                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+                                    onValueChange={setStatusFilter}
+                                    allLabel="All statuses"
+                                    options={[
+                                        { value: "pending", label: "Pending" },
+                                        { value: "confirmed", label: "Confirmed" },
+                                        { value: "accepted", label: "Accepted" },
+                                        { value: "in-progress", label: "In progress" },
+                                        { value: "service_completed", label: "Completed" },
+                                        { value: "cancelled", label: "Cancelled" },
+                                    ]}
+                                />
                             </div>
-                            <div className="relative shrink-0">
-                                <select
-                                    aria-label="Booking revenue"
-                                    value={revenueFilter}
-                                    onChange={(event) => setRevenueFilter(event.target.value)}
-                                    className="border-input bg-background h-9 w-[170px] appearance-none rounded-md border px-3 pr-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                                >
-                                    <option value="all">All Revenue</option>
-                                    <option value="issues">Revenue Issues</option>
-                                    <option value="negative">Negative Revenue</option>
-                                    <option value="wallet_equal">Amount = Wallet</option>
-                                </select>
-                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+                            <div className="w-[210px] shrink-0">
+                                <MultiSelectFilter
+                                    aria-label="Filter bookings by service category"
+                                    value={categoryFilter}
+                                    onValueChange={setCategoryFilter}
+                                    allLabel="All service categories"
+                                    options={categoryOptions}
+                                    disabled={loading || categoryOptions.length === 0}
+                                />
                             </div>
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={handleExport}
                                 disabled={filteredBookings.length === 0}
-                                className="shrink-0"
+                                className="h-9 shrink-0"
                             >
                                 <Download className="mr-2 h-4 w-4" />
                                 Export CSV

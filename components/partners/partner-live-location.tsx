@@ -104,10 +104,7 @@ export function PartnerLiveLocation() {
   const [search, setSearch] =
     useState("")
 
-  const [filter, setFilter] =
-    useState<
-      "ALL" | TrackingStatus
-    >("ALL")
+  const [filter, setFilter] = useState<TrackingStatus[]>([])
 
   const [loading, setLoading] =
     useState(true)
@@ -519,8 +516,7 @@ export function PartnerLiveLocation() {
             )
 
           const statusMatched =
-            filter === "ALL" ||
-            filter === status
+            filter.length === 0 || filter.includes(status)
 
           const searchMatched =
             !keyword ||
@@ -887,42 +883,40 @@ export function PartnerLiveLocation() {
               <MapFilterButton
                 text={`All ${partners.length}`}
                 active={
-                  filter === "ALL"
+                  filter.length === 0
                 }
                 onClick={() =>
-                  setFilter("ALL")
+                  setFilter([])
                 }
               />
 
               <MapFilterButton
                 text={`Live ${liveCount}`}
                 active={
-                  filter === "LIVE"
+                  filter.includes("LIVE")
                 }
                 onClick={() =>
-                  setFilter("LIVE")
+                  setFilter((current) => current.includes("LIVE") ? current.filter((item) => item !== "LIVE") : [...current, "LIVE"])
                 }
               />
 
               <MapFilterButton
                 text={`Delayed ${delayedCount}`}
                 active={
-                  filter === "DELAYED"
+                  filter.includes("DELAYED")
                 }
                 onClick={() =>
-                  setFilter(
-                    "DELAYED"
-                  )
+                  setFilter((current) => current.includes("DELAYED") ? current.filter((item) => item !== "DELAYED") : [...current, "DELAYED"])
                 }
               />
 
               <MapFilterButton
                 text={`Lost ${lostCount}`}
                 active={
-                  filter === "LOST"
+                  filter.includes("LOST")
                 }
                 onClick={() =>
-                  setFilter("LOST")
+                  setFilter((current) => current.includes("LOST") ? current.filter((item) => item !== "LOST") : [...current, "LOST"])
                 }
               />
 
