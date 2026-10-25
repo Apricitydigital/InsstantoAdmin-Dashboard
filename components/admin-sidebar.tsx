@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BarChart3, Bot, Calendar, ChevronDown, ChevronRight, CreditCard, LayoutDashboard, Loader2, LogOut, Menu, Package, PanelLeftClose, PanelLeftOpen, ShieldCheck, ShoppingBag, Ticket, User, UserCheck, Users, Wrench, MessageSquare } from "lucide-react"
+import { BarChart3, Bot, Calendar, ChevronDown, ChevronRight, CreditCard, LayoutDashboard, Loader2, LogOut, Menu, Package, PanelLeftClose, PanelLeftOpen, ShieldCheck, ShoppingBag, Ticket, User, UserCheck, Users, Wrench, MessageSquare, Wallet } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -17,12 +17,27 @@ const navigation = [
   { name: "Partners", href: "/partners", icon: UserCheck, permissions: ["partners:view", "partners:manage"] },
   { name: "Bookings", href: "/bookings", icon: Calendar, permissions: ["bookings:view"] },
   { name: "Payments", href: "/payments", icon: CreditCard, permissions: ["payments:view"] },
+{
+  name: "RazorpayX Payouts",
+  href: "/razorpayx-payouts",
+  icon: Wallet,
+  permissions: ["payments:view"],
+},
+
   { name: "Coupons & offers", href: "/coupons", icon: Ticket, permissions: ["coupons:view"] },
   { name: "Slot Visits & Availability", href: "/slot-availability", icon: Calendar, permissions: ["analytics:view"] },
   { name: "Services & coverage", href: "/services", icon: Wrench, permissions: ["services:view"] },
   { name: "Complaints & support", href: "/support", icon: MessageSquare, permissions: ["complaints:view"] },
   { name: "AI data assistant", href: "/chatbot", icon: Bot, permissions: ["chatbot:view"] },
   { name: "Store", href: "/store", icon: ShoppingBag, permissions: ["store:view"] },
+
+{
+  name: "Finance",
+  href: "/finance",
+  icon: Wallet,
+  permissions: ["payments:view"],
+},
+
   {
     name: "Analytics", href: "/analytics", icon: BarChart3, permissions: ["analytics:view"],
     children: [
@@ -30,6 +45,7 @@ const navigation = [
       { name: "Operations", href: "/analytics/operations" },
       { name: "Service performance", href: "/analytics/service-performance" },
       { name: "Marketing", href: "/analytics/marketing" },
+      
     ],
   },
   { name: "Role management", href: "/roles", icon: ShieldCheck, superadminOnly: true },

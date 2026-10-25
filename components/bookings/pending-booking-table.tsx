@@ -9,9 +9,10 @@ import {
   onSnapshot,
   query,
 } from "firebase/firestore"
-import { CalendarClock, ChevronLeft, ChevronRight, Download, Loader2, Search } from "lucide-react"
+import { AlertTriangle, CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Search, ShieldCheck } from "lucide-react"
 
 import { getFirestoreDb } from "@/lib/firebase"
+import { getAuth } from "firebase/auth"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,6 +35,8 @@ type PendingBooking = {
   amount: number
   status: string
   createdAt: Date | null
+  paymentStatus: string
+  orderId: string
 }
 
 const PAGE_SIZE = 20
@@ -62,7 +65,7 @@ function firstText(...values: unknown[]) {
 }
 
 function amountFrom(data: DocumentData) {
-  const value = data.amount_paid ?? data.amount ?? data.totalAmount ?? data.total_amount
+  const value = data.bookingData?.amount ?? data.amount_paid ?? data.amount ?? data.totalAmount ?? data.total_amount
     ?? data.finalAmount ?? data.subTotal ?? data.subtotal ?? data.price ?? 0
   const amount = Number(value)
   return Number.isFinite(amount) ? amount : 0
@@ -76,7 +79,7 @@ function dateFrom(data: DocumentData) {
 }
 
 function addressFrom(data: DocumentData) {
-  const value = data.bookingAddress ?? data.booking_address ?? data.customer_address ?? data.address
+  const value = data.bookingData?.address ?? data.bookingAddress ?? data.booking_address ?? data.customer_address ?? data.address
   if (typeof value === "string") return value
   if (value && typeof value === "object") {
     return firstText(value.formatted_address, value.formattedAddress, value.address, value.fullAddress)
@@ -114,6 +117,33 @@ export function PendingBookingTable({
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [page, setPage] = useState(1)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [recoverMessage, setRecoverMessage] = useState<{id: string; ok: boolean; text: string} | null>(null)
+
+  const recoverBooking = async (record: PendingBooking) => {
+    if (busyId) return
+    if (record.status === "BOOKING_CREATED") return
+    if (!window.confirm(`Verify payment and recover booking ${record.id}? This will update Firestore and cannot be undone.`)) return
+    setBusyId(record.id)
+    setRecoverMessage(null)
+    try {
+      const user = getAuth().currentUser
+      if (!user) throw new Error("Admin session expired. Please sign in again.")
+      const token = await user.getIdToken()
+      const response = await fetch("/api/admin/recover-booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ collectionName, pendingId: record.id }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || `Recovery failed (${response.status})`)
+      setRecoverMessage({ id: record.id, ok: true, text: result.message || `Booking ${record.id} created successfully.` })
+    } catch (cause) {
+      setRecoverMessage({ id: record.id, ok: false, text: cause instanceof Error ? cause.message : "Recovery failed" })
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -161,6 +191,7 @@ export function PendingBookingTable({
                 customerData.phone
               ),
               service: firstText(
+                data.bookingData?.serviceName,
                 data.serviceName,
                 data.service_name,
                 data.subcategory_name,
@@ -172,6 +203,8 @@ export function PendingBookingTable({
               address: addressFrom(data),
               amount: amountFrom(data),
               status: firstText(data.bookingStatus, data.booking_status, data.status, data.payment_status) || "Pending",
+              paymentStatus: firstText(data.paymentStatus, data.payment_status),
+              orderId: firstText(data.razorpayOrderId, data.razorpay_order_id),
               createdAt: dateFrom(data),
             } satisfies PendingBooking
           }))
@@ -217,6 +250,7 @@ export function PendingBookingTable({
           record.service,
           record.address,
           record.status,
+         record.orderId,
         ].join(" ").toLowerCase().includes(term)
         return matchesDate && matchesStatus && matchesSearch
       })
@@ -240,9 +274,10 @@ export function PendingBookingTable({
       record.amount,
       record.status,
       formatDate(record.createdAt),
+      record.orderId,
     ])
     const csv = [
-      ["Booking ID", "Source", "Customer", "Phone", "Service", "Address", "Amount", "Status", "Created"],
+      ["Booking ID", "Source", "Customer", "Phone", "Service", "Address", "Amount", "Status", "Created", "Razorpay Order ID"],
       ...rows,
     ].map((row) => row.map(csvValue).join(",")).join("\n")
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
@@ -275,14 +310,29 @@ export function PendingBookingTable({
         </CardHeader>
 
         <CardContent className="p-3 sm:p-5">
+          {recoverMessage && (
+            <div role="status" className={`mb-4 flex items-start gap-2 rounded-xl border p-3 text-sm ${recoverMessage.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+              {recoverMessage.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+              <span><strong>{recoverMessage.id}:</strong> {recoverMessage.text}</span>
+            </div>
+          )}
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <Table exportable={false} className="min-w-[1200px]">
-              <TableHeader><TableRow className="bg-slate-50/80"><TableHead>Booking ID</TableHead><TableHead>Created</TableHead><TableHead>Customer</TableHead><TableHead>Phone</TableHead><TableHead>Service</TableHead><TableHead>Address</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+            <Table exportable={false} className="min-w-[1330px]">
+              <TableHeader><TableRow className="bg-slate-50/80"><TableHead>Booking ID</TableHead><TableHead>Created</TableHead><TableHead>Customer</TableHead><TableHead>Phone</TableHead><TableHead>Service</TableHead><TableHead>Address</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead>Recovery</TableHead></TableRow></TableHeader>
               <TableBody>
-                {loading ? <TableRow><TableCell colSpan={8} className="py-14 text-center text-slate-500"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading {sourceLabel.toLowerCase()} pending bookings...</TableCell></TableRow>
-                  : error ? <TableRow><TableCell colSpan={8} className="py-10 text-center text-red-600">{error}</TableCell></TableRow>
-                    : visible.length === 0 ? <TableRow><TableCell colSpan={8} className="py-14 text-center text-slate-500">No pending bookings found.</TableCell></TableRow>
-                      : visible.map((record) => <TableRow key={record.id}><TableCell className="max-w-[190px] truncate font-medium" title={record.id}>{record.id}</TableCell><TableCell className="whitespace-nowrap">{formatDate(record.createdAt)}</TableCell><TableCell>{record.customer || "—"}</TableCell><TableCell>{record.phone || "—"}</TableCell><TableCell className="max-w-[220px] truncate" title={record.service}>{record.service || "—"}</TableCell><TableCell className="max-w-[260px] truncate" title={record.address}>{record.address || "—"}</TableCell><TableCell className="text-right font-semibold">₹{record.amount.toLocaleString("en-IN")}</TableCell><TableCell><Badge variant="secondary">{record.status}</Badge></TableCell></TableRow>)}
+                {loading ? <TableRow><TableCell colSpan={9} className="py-14 text-center text-slate-500"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading {sourceLabel.toLowerCase()} pending bookings...</TableCell></TableRow>
+                  : error ? <TableRow><TableCell colSpan={9} className="py-10 text-center text-red-600">{error}</TableCell></TableRow>
+                    : visible.length === 0 ? <TableRow><TableCell colSpan={9} className="py-14 text-center text-slate-500">No pending bookings found.</TableCell></TableRow>
+                      : visible.map((record) => <TableRow key={record.id}><TableCell className="max-w-[190px] truncate font-medium" title={record.id}>{record.id}</TableCell><TableCell className="whitespace-nowrap">{formatDate(record.createdAt)}</TableCell><TableCell>{record.customer || "—"}</TableCell><TableCell>{record.phone || "—"}</TableCell><TableCell className="max-w-[220px] truncate" title={record.service}>{record.service || "—"}</TableCell><TableCell className="max-w-[260px] truncate" title={record.address}>{record.address || "—"}</TableCell><TableCell className="text-right font-semibold">₹{record.amount.toLocaleString("en-IN")}</TableCell><TableCell><Badge variant="secondary">{record.status}</Badge></TableCell><TableCell>
+                        {record.status === "BOOKING_CREATED" ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Created</span>
+                        ) : (
+                          <Button type="button" size="sm" variant="outline" className="gap-2 whitespace-nowrap" disabled={!!busyId || !record.orderId} onClick={() => recoverBooking(record)} title={!record.orderId ? "No Razorpay order ID; cannot verify payment" : "Server verifies captured payment and checks duplicates before creating"}>
+                            {busyId === record.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                            {busyId === record.id ? "Verifying…" : "Create Booking"}
+                          </Button>
+                        )}
+                      </TableCell></TableRow>)}
               </TableBody>
             </Table>
           </div>
