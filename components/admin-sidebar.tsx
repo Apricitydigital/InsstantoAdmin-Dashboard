@@ -17,37 +17,44 @@ const navigation = [
   { name: "Partners", href: "/partners", icon: UserCheck, permissions: ["partners:view", "partners:manage"] },
   { name: "Bookings", href: "/bookings", icon: Calendar, permissions: ["bookings:view"] },
   { name: "Payments", href: "/payments", icon: CreditCard, permissions: ["payments:view"] },
-{
-  name: "RazorpayX Payouts",
-  href: "/razorpayx-payouts",
-  icon: Wallet,
-  permissions: ["payments:view"],
-},
-
-  { name: "Coupons & offers", href: "/coupons", icon: Ticket, permissions: ["coupons:view"] },
-  { name: "Slot Visits & Availability", href: "/slot-availability", icon: Calendar, permissions: ["analytics:view"] },
-  { name: "Services & coverage", href: "/services", icon: Wrench, permissions: ["services:view"] },
-  { name: "Complaints & support", href: "/support", icon: MessageSquare, permissions: ["complaints:view"] },
-  { name: "AI data assistant", href: "/chatbot", icon: Bot, permissions: ["chatbot:view"] },
-  { name: "Store", href: "/store", icon: ShoppingBag, permissions: ["store:view"] },
-
-{
-  name: "Finance",
+  {
+  name: "Expenses",
   href: "/finance",
   icon: Wallet,
   permissions: ["payments:view"],
 },
 
-  {
-    name: "Analytics", href: "/analytics", icon: BarChart3, permissions: ["analytics:view"],
-    children: [
-      { name: "Revenue", href: "/analytics/revenue" },
-      { name: "Operations", href: "/analytics/operations" },
-      { name: "Service performance", href: "/analytics/service-performance" },
-      { name: "Marketing", href: "/analytics/marketing" },
+// {
+//   name: "RazorpayX Payouts",
+//   href: "/razorpayx-payouts",
+//   icon: Wallet,
+//   permissions: ["payments:view"],
+// },
+
+  { name: "Coupons & offers", href: "/coupons", icon: Ticket, permissions: ["coupons:view"] },
+  { name: "Slot Visits & Availability", href: "/slot-availability", icon: Calendar, permissions: ["analytics:view"] },
+  { name: "Services & coverage", href: "/services", icon: Wrench, permissions: ["services:view"] },
+  { name: "Complaints & support", href: "/support", icon: MessageSquare, permissions: ["complaints:view"] },
+  // { name: "AI data assistant", href: "/chatbot", icon: Bot, permissions: ["chatbot:view"] },
+  { name: "Store", href: "/store", icon: ShoppingBag, permissions: ["store:view"] },
+
+// {
+//   name: "Finance",
+//   href: "/finance",
+//   icon: Wallet,
+//   permissions: ["payments:view"],
+// },
+
+  // {
+  //   name: "Analytics", href: "/analytics", icon: BarChart3, permissions: ["analytics:view"],
+  //   children: [
+  //     { name: "Revenue", href: "/analytics/revenue" },
+  //     { name: "Operations", href: "/analytics/operations" },
+  //     { name: "Service performance", href: "/analytics/service-performance" },
+  //     { name: "Marketing", href: "/analytics/marketing" },
       
-    ],
-  },
+  //   ],
+  // },
   { name: "Role management", href: "/roles", icon: ShieldCheck, superadminOnly: true },
 ]
 

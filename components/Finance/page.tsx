@@ -239,7 +239,7 @@ export default function Finance() {
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              Finance Overview
+              Expense Overview
             </h1>
             <p className="text-sm text-muted-foreground">
               Insstanto Marketing & Operational Expenses
@@ -343,7 +343,11 @@ export default function Finance() {
                   ["Meta Ads", getCategoryTotal("meta ads")],
                   ["Google Ads", getCategoryTotal("google ads")],
                   ["MSG91", getCategoryTotal("msg91")],
-                  ["RazorpayX", getCategoryTotal("razorpay x")],
+                
+
+["Razorpay Subscription Fees", getCategoryTotal("razorpayx")],
+
+
                   ["Firebase", getCategoryTotal("firebase")],
                 ].map(([label, amount]) => (
                   <div
