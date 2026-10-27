@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { getAuth } from "firebase/auth"
 import { collection, doc, DocumentData, DocumentReference, getDoc, onSnapshot, query } from "firebase/firestore"
-import { CalendarClock, ChevronLeft, ChevronRight, Download, Eye, Loader2, Search } from "lucide-react"
+import { AlertTriangle, CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, Loader2, Search, ShieldCheck } from "lucide-react"
 
 import { getFirestoreDb } from "@/lib/firebase"
 import { Badge } from "@/components/ui/badge"
@@ -116,6 +117,35 @@ export function PendingBookingTable({ collectionName, sourceLabel, fromDate, toD
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<PendingBooking | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [recoverMessage, setRecoverMessage] = useState<{ id: string; ok: boolean; text: string } | null>(null)
+
+  const recoverBooking = async (record: PendingBooking) => {
+    if (busyId || record.status === "BOOKING_CREATED") return
+    if (!window.confirm(`Verify payment and recover booking ${record.id}? This will update Firestore and cannot be undone.`)) return
+
+    setBusyId(record.id)
+    setRecoverMessage(null)
+    try {
+      const user = getAuth().currentUser
+      if (!user) throw new Error("Admin session expired. Please sign in again.")
+
+      const token = await user.getIdToken()
+      const response = await fetch("/api/recover-booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ collectionName, pendingId: record.id }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || `Recovery failed (${response.status})`)
+
+      setRecoverMessage({ id: record.id, ok: true, text: result.message || `Booking ${record.id} created successfully.` })
+    } catch (cause) {
+      setRecoverMessage({ id: record.id, ok: false, text: cause instanceof Error ? cause.message : "Recovery failed" })
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -240,19 +270,34 @@ export function PendingBookingTable({ collectionName, sourceLabel, fromDate, toD
         </div>
       </CardHeader>
       <CardContent className="p-3 sm:p-5">
+        {recoverMessage && (
+          <div role="status" className={`mb-4 flex items-start gap-2 rounded-xl border p-3 text-sm ${recoverMessage.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+            {recoverMessage.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+            <span><strong>{recoverMessage.id}:</strong> {recoverMessage.text}</span>
+          </div>
+        )}
         <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <Table exportable={false} className="min-w-[1480px]">
-            <TableHeader><TableRow className="bg-slate-50/80"><TableHead>Booking ID</TableHead><TableHead>Created</TableHead><TableHead>Slot</TableHead><TableHead>Customer</TableHead><TableHead>Phone</TableHead><TableHead>Service</TableHead><TableHead>City / address</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Details</TableHead></TableRow></TableHeader>
+          <Table exportable={false} className="min-w-[1600px]">
+            <TableHeader><TableRow className="bg-slate-50/80"><TableHead>Booking ID</TableHead><TableHead>Created</TableHead><TableHead>Slot</TableHead><TableHead>Customer</TableHead><TableHead>Phone</TableHead><TableHead>Service</TableHead><TableHead>City / address</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead>Recovery</TableHead><TableHead className="text-right">Details</TableHead></TableRow></TableHeader>
             <TableBody>{loading
-              ? <TableRow><TableCell colSpan={10} className="py-14 text-center text-slate-500"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading {sourceLabel.toLowerCase()} pending bookings...</TableCell></TableRow>
-              : error ? <TableRow><TableCell colSpan={10} className="py-10 text-center text-red-600">{error}</TableCell></TableRow>
-              : visible.length === 0 ? <TableRow><TableCell colSpan={10} className="py-14 text-center text-slate-500">No pending bookings found.</TableCell></TableRow>
+              ? <TableRow><TableCell colSpan={11} className="py-14 text-center text-slate-500"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading {sourceLabel.toLowerCase()} pending bookings...</TableCell></TableRow>
+              : error ? <TableRow><TableCell colSpan={11} className="py-10 text-center text-red-600">{error}</TableCell></TableRow>
+              : visible.length === 0 ? <TableRow><TableCell colSpan={11} className="py-14 text-center text-slate-500">No pending bookings found.</TableCell></TableRow>
               : visible.map((r) => <TableRow key={r.id}>
                 <TableCell className="max-w-[190px] truncate font-medium" title={r.id}>{r.id}</TableCell><TableCell className="whitespace-nowrap">{formatDate(r.createdAt)}</TableCell>
                 <TableCell className="whitespace-nowrap"><p>{r.slotLabel || formatDate(r.slotAt)}</p>{r.slotLabel && r.slotAt && <p className="text-xs text-slate-500">{formatDate(r.slotAt)}</p>}</TableCell>
                 <TableCell><p>{r.customer || "—"}</p>{r.customerId && <p className="max-w-[160px] truncate text-xs text-slate-500" title={r.customerId}>{r.customerId}</p>}</TableCell><TableCell>{r.phone || "—"}</TableCell>
                 <TableCell className="max-w-[220px] truncate" title={r.service}>{r.service || "—"}</TableCell><TableCell className="max-w-[280px]"><p className="font-medium">{r.city || "—"}</p><p className="truncate text-xs text-slate-500" title={r.address}>{r.address || "—"}</p></TableCell>
-                <TableCell className="text-right font-semibold">{formatMoney(r.amount)}</TableCell><TableCell><Badge variant="secondary">{r.status}</Badge></TableCell><TableCell className="text-right"><Button variant="outline" size="sm" onClick={() => setSelected(r)}><Eye className="mr-1 h-4 w-4" />View</Button></TableCell>
+                <TableCell className="text-right font-semibold">{formatMoney(r.amount)}</TableCell><TableCell><Badge variant="secondary">{r.status}</Badge></TableCell><TableCell>
+                  {r.status === "BOOKING_CREATED" ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Created</span>
+                  ) : (
+                    <Button type="button" size="sm" variant="outline" className="gap-2 whitespace-nowrap" disabled={!!busyId || !r.razorpayOrderId} onClick={() => recoverBooking(r)} title={!r.razorpayOrderId ? "No Razorpay order ID; cannot verify payment" : "Server verifies captured payment and checks duplicates before creating"}>
+                      {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                      {busyId === r.id ? "Verifying…" : "Create Booking"}
+                    </Button>
+                  )}
+                </TableCell><TableCell className="text-right"><Button variant="outline" size="sm" onClick={() => setSelected(r)}><Eye className="mr-1 h-4 w-4" />View</Button></TableCell>
               </TableRow>)}</TableBody>
           </Table>
         </div>

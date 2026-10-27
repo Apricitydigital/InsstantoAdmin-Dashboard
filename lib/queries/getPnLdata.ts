@@ -146,34 +146,73 @@ return settlementByMonth
 MAIN SHARED FUNCTION
 ------------------------------ */
 
+// export async function getPnLData() {
+
+// const now = new Date()
+// const start = addMonths(now, -11)
+
+// const expenseByMonth = await fetchSheetExpenses()
+// const settlementByMonth = await fetchSettlements(start, now)
+
+// const months = Array.from({ length: 12 }).map((_, i) =>
+// addMonths(start, i)
+// )
+
+// return months.map(d => {
+// const key = monthKey(d)
+
+// const expenses = expenseByMonth[key] || 0
+// const settlements = settlementByMonth[key] || 0
+
+// const netPnL = settlements - expenses
+
+// return {
+//   key,
+//   monthDate: d,
+//   expenses,
+//   settlements,
+//   netPnL,
+// }
+
+
+// })
+// }
+
+
 export async function getPnLData() {
+  const now = new Date();
 
-const now = new Date()
-const start = addMonths(now, -11)
+  // Financial reporting starts from April 2025.
+  const start = new Date(2025, 3, 1);
 
-const expenseByMonth = await fetchSheetExpenses()
-const settlementByMonth = await fetchSettlements(start, now)
+  const expenseByMonth = await fetchSheetExpenses();
+  const settlementByMonth = await fetchSettlements(start, now);
 
-const months = Array.from({ length: 12 }).map((_, i) =>
-addMonths(start, i)
-)
+  const totalMonths =
+    (now.getFullYear() - start.getFullYear()) * 12 +
+    (now.getMonth() - start.getMonth()) +
+    1;
 
-return months.map(d => {
-const key = monthKey(d)
+  const months = Array.from(
+    { length: totalMonths },
+    (_, i) => addMonths(start, i)
+  );
 
-const expenses = expenseByMonth[key] || 0
-const settlements = settlementByMonth[key] || 0
+  return months.map((d) => {
+    const key = monthKey(d);
 
-const netPnL = settlements - expenses
+    const expenses = expenseByMonth[key] || 0;
+    const settlements = settlementByMonth[key] || 0;
 
-return {
-  key,
-  monthDate: d,
-  expenses,
-  settlements,
-  netPnL,
+    const netPnL = settlements - expenses;
+
+    return {
+      key,
+      monthDate: d,
+      expenses,
+      settlements,
+      netPnL,
+    };
+  });
 }
 
-
-})
-}

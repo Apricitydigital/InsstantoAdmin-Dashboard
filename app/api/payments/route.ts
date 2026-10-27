@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-
+import { getAuth } from "firebase-admin/auth"
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {

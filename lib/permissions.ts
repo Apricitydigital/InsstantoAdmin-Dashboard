@@ -8,6 +8,11 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { id: "dashboard:view", label: "View dashboard", group: "Dashboard" },
   { id: "bookings:view", label: "View bookings", group: "Bookings" },
   { id: "payments:view", label: "View payments", group: "Payments" },
+  {
+  id: "razorpayx:view",
+  label: "View RazorpayX payout history",
+  group: "Payments",
+},
   { id: "customers:view_limited", label: "View customer list", group: "Customers" },
   { id: "customers:view", label: "View customer details", group: "Customers" },
   { id: "partners:view", label: "View partners", group: "Partners" },
