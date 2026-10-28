@@ -26,7 +26,7 @@ export function OperationalMetrics({ fromDate, toDate }: Props) {
   const metrics = data ? [
     { title: "Onboarded Partners", value: data.onboardedPartners.toLocaleString(), description: "Currently onboarded", icon: UserCheck, color: "text-primary", bg: "bg-primary/10" },
     { title: "Completed Bookings", value: data.completedBookings.toLocaleString(), description: "Selected period", icon: CheckCircle, color: "text-green-600", bg: "bg-green-100" },
-    { title: "Completion Rate", value: `${data.completionRate.toFixed(1)}%`, description: "Completed out of total", icon: Users, color: "text-blue-600", bg: "bg-blue-100" },
+    { title: "Completion Rate", value: `${data.completionRate.toFixed(1)}%`, description: "Completed out of active total", icon: Users, color: "text-blue-600", bg: "bg-blue-100" },
     { title: "Customer Rating", value: data.totalRatings ? `${data.customerSatisfaction.toFixed(2)}/5` : "—", description: data.totalRatings ? `${data.totalRatings} ratings` : "No ratings in period", icon: Heart, color: "text-pink-600", bg: "bg-pink-100" },
     { title: "Repeat Customer Rate", value: `${data.repeatCustomerRate.toFixed(1)}%`, description: "Among customers who booked", icon: Repeat, color: "text-purple-600", bg: "bg-purple-100" },
     { title: "Cancellation Rate", value: `${data.cancellationRate.toFixed(1)}%`, description: "Cancelled out of total", icon: XCircle, color: "text-red-600", bg: "bg-red-100" },

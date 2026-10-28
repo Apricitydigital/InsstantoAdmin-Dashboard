@@ -6,6 +6,7 @@ import { collection, query, where, getDocs, Timestamp } from "firebase/firestore
 import { getFirestoreDb } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
 import { getOnboardedPartnerIdSet } from "@/lib/queries/partners"
+import { isActiveBookingStatus } from "@/lib/booking-status"
 
 interface ChartPlaceholderProps {
   title: string
@@ -73,7 +74,6 @@ export function ChartPlaceholder({
     const bookingsCol = collection(db, "bookings")
     const bookingsQuery = query(
       bookingsCol,
-      where("status", "==", "Service_Completed"),
       where("date", ">=", Timestamp.fromDate(rangeStart)),
       where("date", "<=", Timestamp.fromDate(rangeEnd))
     )
@@ -87,6 +87,7 @@ export function ChartPlaceholder({
 
     snapshot.forEach((bookingDocument) => {
       const data = bookingDocument.data()
+      if (!isActiveBookingStatus(data.status)) return
       const providerId = data.provider_id?.id || data.provider_id
       if (!onboardedPartnerIds.has(providerId)) return
       if (data.customer_id?.id === INTERNAL_CUSTOMER_ID) return

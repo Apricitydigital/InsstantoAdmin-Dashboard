@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore"
 
 import { getFirestoreDb } from "@/lib/firebase"
+import { isActiveBookingStatus, isCancelledBookingStatus, isRevenueEligibleBookingStatus } from "@/lib/booking-status"
 import { getOnboardedPartnerIdSet } from "@/lib/queries/partners"
 import Papa from "papaparse"
 
@@ -432,13 +433,13 @@ function filterBookingsByStatus(
 }
 
 function calculateRevenueData(
-  completedBookings: BookingData[]
+  revenueBookings: BookingData[]
 ) {
   let totalRevenue = 0
   let walletOfferAmount = 0
   let discountAmount = 0
 
-  for (const booking of completedBookings) {
+  for (const booking of revenueBookings) {
     const amountPaid = toNumber(
       booking.amount_paid
     )
@@ -463,16 +464,16 @@ function calculateRevenueData(
     walletOfferAmount +
     discountAmount
 
-  const netRevenue = completedBookings.reduce(
+  const netRevenue = revenueBookings.reduce(
     (sum, booking) =>
       sum + toNumber(booking.amount_paid),
     0
   )
 
   const perOrderValue =
-    completedBookings.length > 0
+    revenueBookings.length > 0
       ? totalRevenue /
-        completedBookings.length
+        revenueBookings.length
       : 0
 
   return {
@@ -1033,18 +1034,14 @@ export async function fetchBookingStats(
       ["Service_Completed"]
     )
 
-  /*
-    Supports both cancellation status values because both forms are
-    commonly present in booking data.
-  */
-  const cancelledBookings =
-    filterBookingsByStatus(
-      currentBookings,
-      [
-        "Booking_Cancelled",
-        "Cancelled",
-      ]
-    ).length
+  const revenueBookingData = currentBookings.filter(
+    (booking) => isRevenueEligibleBookingStatus(booking.status)
+  )
+
+  // Treat every status containing a cancellation variant consistently.
+  const cancelledBookings = currentBookings.filter(
+    (booking) => isCancelledBookingStatus(booking.status)
+  ).length
 
   // ----------------------------------------------------------
   // PREVIOUS STATUS COUNTS
@@ -1056,18 +1053,22 @@ export async function fetchBookingStats(
       ["Service_Completed"]
     )
 
+  const previousRevenueBookingData = previousBookings.filter(
+    (booking) => isRevenueEligibleBookingStatus(booking.status)
+  )
+
   // ----------------------------------------------------------
   // REVENUE
   // ----------------------------------------------------------
 
   const currentRevenue =
     calculateRevenueData(
-      completedBookingData
+      revenueBookingData
     )
 
   const previousRevenue =
     calculateRevenueData(
-      previousCompletedBookingData
+      previousRevenueBookingData
     )
 
   // ----------------------------------------------------------
@@ -1125,11 +1126,13 @@ export async function fetchBookingStats(
   // FINAL VALUES
   // ----------------------------------------------------------
 
-  const totalBookings =
-    currentBookings.length
+  const totalBookings = currentBookings.filter(
+    (booking) => isActiveBookingStatus(booking.status)
+  ).length
 
-  const previousTotalBookings =
-    previousBookings.length
+  const previousTotalBookings = previousBookings.filter(
+    (booking) => isActiveBookingStatus(booking.status)
+  ).length
 
   const completedBookings =
     completedBookingData.length
@@ -1500,15 +1503,12 @@ export async function fetchCategoryWiseBookings(
           bookingDocument.data() as BookingData
       )
       .filter((booking) => {
-        const status =
-          booking.status?.toString().trim()
         const customerId =
           booking.customer_id?.id ??
           booking.customer_id
 
         return (
-          status?.toLowerCase() ===
-            "service_completed" &&
+          isActiveBookingStatus(booking.status) &&
           customerId !==
             INTERNAL_CUSTOMER_ID
         )

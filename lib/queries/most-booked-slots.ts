@@ -1,5 +1,9 @@
 import { collection, getDocs, query, where, Timestamp } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
+import { isActiveBookingStatus } from "@/lib/booking-status";
+import { getOnboardedPartnerIdSet } from "@/lib/queries/partners";
+
+const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2";
 
 export type TimeSlot = {
   time: string;
@@ -10,9 +14,10 @@ export type TimeSlot = {
 export async function fetchMostBookedSlots(fromDate: string, toDate: string): Promise<TimeSlot[]> {
   try {
     const db = getFirestoreDb();
+    const allowedProviders = await getOnboardedPartnerIdSet(db);
 
-    // ✅ Query completed bookings within selected date range
-    const filters: any[] = [where("status", "==", "Service_Completed")];
+    // Query the range and include every non-cancelled booking in slot revenue.
+    const filters: any[] = [];
 
     if (fromDate && toDate) {
       const start = Timestamp.fromDate(new Date(fromDate + "T00:00:00Z"));
@@ -31,6 +36,10 @@ export async function fetchMostBookedSlots(fromDate: string, toDate: string): Pr
 
     snapshot.forEach((doc) => {
       const data = doc.data();
+      if (!isActiveBookingStatus(data.status)) return;
+      const providerId = data.provider_id?.id || data.provider_id;
+      const customerId = data.customer_id?.id || data.customer_id;
+      if (!allowedProviders.has(providerId) || customerId === INTERNAL_CUSTOMER_ID) return;
       const slotDate = data?.timeSlot?.toDate?.() || null;
 
       if (!slotDate) return;

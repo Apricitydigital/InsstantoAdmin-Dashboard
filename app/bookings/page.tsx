@@ -53,9 +53,9 @@ export default function BookingsPage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Booking date</p>
                   <div className="grid gap-3 sm:grid-cols-[minmax(145px,1fr)_auto_minmax(145px,1fr)_auto] sm:items-end">
-                    <div className="space-y-1.5"><Label htmlFor="booking-from-date" className="text-xs text-slate-600">From</Label><Input id="booking-from-date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} max={formatDateInput(today)} className="bg-white" /></div>
+                    <div className="space-y-1.5"><Label htmlFor="booking-from-date" className="text-xs text-slate-600">From</Label><Input id="booking-from-date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} max={toDate || formatDateInput(today)} className="bg-white" /></div>
                     <span className="hidden pb-2 text-xs text-slate-400 sm:block">to</span>
-                    <div className="space-y-1.5"><Label htmlFor="booking-to-date" className="text-xs text-slate-600">To</Label><Input id="booking-to-date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} max={formatDateInput(today)} className="bg-white" /></div>
+                    <div className="space-y-1.5"><Label htmlFor="booking-to-date" className="text-xs text-slate-600">To</Label><Input id="booking-to-date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} min={fromDate || undefined} max={formatDateInput(today)} className="bg-white" /></div>
                     <Button variant="outline" onClick={resetDates} className="bg-white"><RotateCcw className="mr-2 h-4 w-4" />Reset</Button>
                   </div>
                 </div>

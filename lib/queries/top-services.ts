@@ -1,5 +1,6 @@
 import { getFirestoreDb } from "@/lib/firebase";
 import { getOnboardedPartnerIdSet } from "@/lib/queries/partners";
+import { isActiveBookingStatus } from "@/lib/booking-status";
 import {
   collection,
   getDocs,
@@ -57,9 +58,9 @@ export async function fetchTopServices(
   try {
     const db = getFirestoreDb();
 
-    // Base query for completed bookings
+    // Query the range and apply the shared non-cancelled booking rule below.
     const baseQuery = collection(db, "bookings");
-    const filters: any[] = [where("status", "==", "Service_Completed")];
+    const filters: any[] = [];
 
     // ✅ Apply date filter using Firestore Timestamps
     if (fromDate && toDate) {
@@ -80,8 +81,11 @@ export async function fetchTopServices(
     // Count bookings per subcategory (filtered by allowed providers)
     for (const docSnap of snapshot.docs) {
       const booking = docSnap.data();
+      if (!isActiveBookingStatus(booking.status)) continue;
       const providerId = booking.provider_id?.id || booking.provider_id;
+      const customerId = booking.customer_id?.id || booking.customer_id;
       if (!allowedProviders.has(providerId)) continue;
+      if (customerId === INTERNAL_CUSTOMER_ID) continue;
 
       const subCatRef: DocumentReference<DocumentData> | undefined =
         booking.subCategoryCart_id;
@@ -150,7 +154,7 @@ export async function fetchTopCategories(
     const db = getFirestoreDb();
     const allowedProviders = await getOnboardedPartnerIdSet(db);
 
-    const filters: any[] = [where("status", "==", "Service_Completed")];
+    const filters: any[] = [];
 
     if (fromDate && toDate) {
       const start = Timestamp.fromDate(new Date(fromDate + "T00:00:00"));
@@ -171,6 +175,7 @@ export async function fetchTopCategories(
         const customerId = b.customer_id?.id || b.customer_id;
 
         return (
+          isActiveBookingStatus(b.status) &&
           allowedProviders.has(providerId) &&
           customerId !== INTERNAL_CUSTOMER_ID
         );

@@ -36,14 +36,14 @@ export default function BookingStatsView({ fromDate, toDate }: Props) {
   }, [fromDate, toDate])
 
   const cards = [
-    { title: "Total bookings", value: stats?.totalBookings.toLocaleString() || "0", description: "Within selected period" },
+    { title: "Total bookings", value: stats?.totalBookings.toLocaleString() || "0", description: "Active and completed" },
     { title: "Completed", value: stats?.completedBookings.toLocaleString() || "0", description: "Successfully finished" },
-    { title: "Pending", value: stats?.pendingBookings.toLocaleString() || "0", description: "Awaiting confirmation" },
-    { title: "Accepted", value: stats?.confirmedBookings.toLocaleString() || "0", description: "Confirmed by partner" },
+    { title: "Pending", value: stats?.pendingBookings.toLocaleString() || "0", description: "Status: Pending" },
+    { title: "Accepted", value: stats?.confirmedBookings.toLocaleString() || "0", description: "Accepted or confirmed" },
     { title: "Total revenue", value: `₹${Math.round(stats?.totalRevenue || 0).toLocaleString()}`, description: "Recorded booking revenue" },
     { title: "Average rating", value: stats?.averageRating ? stats.averageRating.toFixed(2) : "—", description: "Customer booking rating" },
-    { title: "Completion rate", value: `${(stats?.completionRate || 0).toFixed(1)}%`, description: "Completed out of total" },
-    { title: "Cancelled", value: stats?.cancelledByCustomer.toLocaleString() || "0", description: "Cancelled after acceptance" },
+    { title: "Completion rate", value: `${(stats?.completionRate || 0).toFixed(1)}%`, description: "Completed out of active total" },
+    { title: "Cancelled", value: stats?.cancelledBookings.toLocaleString() || "0", description: "All cancellation statuses" },
   ]
 
   if (error) return <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>

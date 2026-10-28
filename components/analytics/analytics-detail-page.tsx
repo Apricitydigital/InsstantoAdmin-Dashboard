@@ -20,9 +20,9 @@ const titles: Record<AnalyticsKind, string> = {
 }
 
 const descriptions: Record<AnalyticsKind, string> = {
-  revenue: "Completed-booking sales and collected revenue.",
+  revenue: "Sales and collected revenue from all non-cancelled bookings.",
   operations: "Booking fulfilment, customer retention, ratings and partner supply.",
-  services: "Live category performance based on completed bookings.",
+  services: "Live category performance based on non-cancelled bookings.",
   marketing: "Connected acquisition data and external metrics awaiting source files.",
 }
 

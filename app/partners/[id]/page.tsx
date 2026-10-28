@@ -12,6 +12,7 @@ import {
   Timestamp,
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
+import { isActiveBookingStatus } from "@/lib/booking-status"
 
 import { ProtectedRoute } from "@/components/auth/protected-route"
 import { AdminHeader } from "@/components/admin-header"
@@ -253,19 +254,24 @@ const [aiLoading, setAiLoading] = useState(false)
         const bookingsQuery = query(collection(db, "bookings"), ...queryFilters)
         const snapshot = await getDocs(bookingsQuery)
 
-        let total = snapshot.size
+        let total = 0
         let completed = 0
         let workingDaysSet = new Set<string>()
 
         snapshot.forEach((docSnap) => {
           const data = docSnap.data()
+          const isActive = isActiveBookingStatus(data.status)
+
+          if (isActive) {
+            total++
+          }
 
           if (data.status?.toLowerCase() === "service_completed") {
             completed++
           }
 
           // ✅ Working days logic (only current month if no date selected)
-          if (data.timeSlot instanceof Timestamp) {
+          if (isActive && data.timeSlot instanceof Timestamp) {
             const slotDate = data.timeSlot.toDate()
             const isWithinRange = slotDate >= startDate && slotDate <= endDate
             if (isWithinRange) workingDaysSet.add(slotDate.toDateString())

@@ -9,6 +9,7 @@ import {
 import { fetchDailyOverviewSummary } from "@/lib/queries/daily-overview"
 import { fetchNewVsRepeatCustomers } from "@/lib/queries/customer-insights"
 import { getFirestoreDb } from "@/lib/firebase"
+import { isActiveBookingStatus, isRevenueEligibleBookingStatus } from "@/lib/booking-status"
 import { getOnboardedPartnerIds, getOnboardedPartnerIdSet } from "@/lib/queries/partners"
 import { fetchTopCategories, type TopCategory } from "@/lib/queries/top-services"
 import { collection, getDocs, query, Timestamp, where } from "firebase/firestore"
@@ -177,7 +178,7 @@ export async function fetchRevenueAnalytics(fromDate: string, toDate: string): P
     const bookingDate: Date | null = booking.date?.toDate?.() || null
 
     if (
-      booking.status !== "Service_Completed" ||
+      !isRevenueEligibleBookingStatus(booking.status) ||
       !onboardedPartnerIds.has(providerId) ||
       customerId === INTERNAL_CUSTOMER_ID ||
       !bookingDate
@@ -226,8 +227,9 @@ export async function fetchOperationalAnalytics(
   const repeatCustomerRate = retainedCustomers > 0
     ? (customerStats.repeatCustomerCount / retainedCustomers) * 100
     : 0
-  const cancellationRate = bookingStats.totalBookings > 0
-    ? (bookingStats.cancelledBookings / bookingStats.totalBookings) * 100
+  const bookingAttempts = bookingStats.totalBookings + bookingStats.cancelledBookings
+  const cancellationRate = bookingAttempts > 0
+    ? (bookingStats.cancelledBookings / bookingAttempts) * 100
     : 0
 
   return {
@@ -280,19 +282,18 @@ export async function fetchDailyWhatsAppReport(): Promise<DailyWhatsAppReport> {
     .map((bookingDocument) => bookingDocument.data())
     .filter((booking) => !isPartnerCancelledBooking(booking))
 
-  let totalBookings = 0
-  let cancelledBookings = 0
+  const activeReportBookings = reportBookings.filter((booking) =>
+    isActiveBookingStatus(booking.status)
+  )
+
+  const totalBookings = activeReportBookings.length
+  const cancelledBookings = reportBookings.filter(isCancelledBooking).length
   let totalBookingAmount = 0
   let netProfit = 0
   const completedBookingsByCustomer = new Map<string, number>()
 
-  reportBookings.forEach((booking) => {
+  activeReportBookings.forEach((booking) => {
     const customerId = booking.customer_id?.id || booking.customer_id || booking.customer?.id || booking.customer
-
-    totalBookings += 1
-    if (isCancelledBooking(booking)) {
-      cancelledBookings += 1
-    }
 
     const bookingAmount = Number(booking.totalservice_price || 0) + Number(booking.taxAmount || booking.tax_amount || 0)
     const partnerFare = Number(booking.partner_fare || 0)
@@ -316,7 +317,7 @@ export async function fetchDailyWhatsAppReport(): Promise<DailyWhatsAppReport> {
     Driver: 0,
     Maid: 0,
   }
-  const resolvedCategories = await Promise.all(reportBookings.map(resolveReportCategory))
+  const resolvedCategories = await Promise.all(activeReportBookings.map(resolveReportCategory))
   resolvedCategories.forEach((category) => {
     if (category) categoryCounts[category] += 1
   })

@@ -10,6 +10,7 @@ import {
     getDoc,
 } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
+import { isActiveBookingStatus, isRevenueEligibleBookingStatus } from "@/lib/booking-status";
 import { getOnboardedPartnerIdSet } from "@/lib/queries/partners";
 import Papa from "papaparse";
 import { getPnLData } from "@/lib/queries/getPnLdata"
@@ -225,7 +226,9 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
         const provider = bookingDocument.data().provider_id;
         return onboardedPartnerIds.has(provider?.id || provider);
     });
-    const totalBookings = bookingDocs.length;
+    const totalBookings = bookingDocs.filter((bookingDocument) =>
+        isActiveBookingStatus(bookingDocument.data().status)
+    ).length;
 
     /* ------------------------------
        BOOKINGS — STATUS
@@ -240,6 +243,9 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     const confirmedSnap = bookingsWithStatus("Accepted");
     const completedSnap = bookingsWithStatus("Service_Completed");
     const cancelledSnap = bookingsWithStatus("Booking_Cancelled");
+    const revenueSnap = bookingDocs.filter((bookingDocument) =>
+        isRevenueEligibleBookingStatus(bookingDocument.data().status)
+    );
 
     const pendingBookings = pendingSnap.length;
     const confirmedBookings = confirmedSnap.length;
@@ -247,7 +253,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     const cancelledBookings = cancelledSnap.length;
 
     /* ------------------------------
-       REVENUE CALCULATION (completed only)
+       REVENUE CALCULATION (all non-cancelled bookings)
     ------------------------------ */
     let totalRevenue = 0;
     let walletUsed = 0;
@@ -255,20 +261,24 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     let totalOfferAmount = 0;
 
     const completedDocsData: Array<{
+        customer_id?: DocumentReference | null;
+    }> = completedSnap.map((snapDoc) => ({
+        customer_id: snapDoc.data().customer_id ?? null,
+    }));
+
+    const revenueDocsData: Array<{
         amount_paid?: number;
         walletAmountUsed?: number;
         discount_amount?: number;
-        customer_id?: DocumentReference | null;
     }> = [];
 
-    completedSnap.forEach((snapDoc) => {
+    revenueSnap.forEach((snapDoc) => {
         const d = snapDoc.data() as any;
 
-        completedDocsData.push({
+        revenueDocsData.push({
             amount_paid: d.amount_paid ?? 0,
             walletAmountUsed: d.walletAmountUsed ?? 0,
             discount_amount: d.discount_amount ?? 0,
-            customer_id: d.customer_id ?? null,
         });
 
         const amountPaid = Number(d.amount_paid) || 0;
@@ -281,12 +291,12 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
         totalOfferAmount += walletAmount + discountAmount;
     });
 
-    const netRevenue = completedDocsData.reduce(
+    const netRevenue = revenueDocsData.reduce(
         (sum, booking) => sum + (Number(booking.amount_paid) || 0),
         0
     );
 
-    const perOrderValue = completedBookings > 0 ? totalRevenue / completedBookings : 0;
+    const perOrderValue = revenueSnap.length > 0 ? totalRevenue / revenueSnap.length : 0;
 
     /* ------------------------------
        NEW CUSTOMERS CREATED IN RANGE
@@ -479,11 +489,10 @@ export async function fetchCategoryWiseBookings(
 
     const bookingsCol = collection(db, "bookings");
 
-    // Get all completed bookings in the date range, excluding the internal test/customer account
-    const completedSnap = await getDocs(
+    // Get all bookings in the date range, then keep active lifecycle statuses.
+    const bookingSnap = await getDocs(
         query(
             bookingsCol,
-            where("status", "==", "Service_Completed"),
             where("date", ">=", fromTS),
             where("date", "<=", toTS)
         )
@@ -497,8 +506,9 @@ export async function fetchCategoryWiseBookings(
     };
 
     // Count bookings by category
-    for (const docSnap of completedSnap.docs) {
+    for (const docSnap of bookingSnap.docs) {
         const booking = docSnap.data() as any;
+        if (!isActiveBookingStatus(booking.status)) continue;
         const providerId = booking.provider_id?.id || booking.provider_id;
         if (!onboardedPartnerIds.has(providerId)) continue;
         const customerId = booking.customer_id?.id || booking.customer_id;

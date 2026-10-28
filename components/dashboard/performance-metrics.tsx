@@ -8,6 +8,7 @@ import { Clock, Star, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react
 import { fetchTopCategories, type TopCategory } from "@/lib/queries/top-services";
 import { fetchMostBookedSlots, type TimeSlot } from "@/lib/queries/most-booked-slots";
 import { fetchCustomerStats } from "@/lib/queries/customers";
+import { OVERALL_BOOKING_START_DATE } from "@/lib/queries/customer-cohorts";
 
 type TimeSlotWithPercentage = TimeSlot & { percentage: number };
 
@@ -57,8 +58,8 @@ export function PerformanceMetrics({
       try {
         const data = await fetchCustomerStats(fromDate, toDate);
 
-        setRepeatCustomerCount(data.customersWithMultipleBookings);
-        setNewCustomerCount(data.customersWithOneBooking);
+        setRepeatCustomerCount(data.repeatCustomerCount);
+        setNewCustomerCount(data.newCustomerCount);
 
         setAverageRating(0);
         setTotalRatings(0);
@@ -84,6 +85,7 @@ export function PerformanceMetrics({
     peakHoursPage * ITEMS_PER_PAGE
   );
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const isOverallCustomerRange = fromDate === OVERALL_BOOKING_START_DATE;
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -269,7 +271,9 @@ export function PerformanceMetrics({
             <TrendingUp className="h-5 w-5 text-green-500" /> Customer Insights
           </CardTitle>
           <CardDescription className="text-muted-foreground">
-            Customer behavior and satisfaction
+            {isOverallCustomerRange
+              ? "One booking versus multiple bookings since April 1, 2025"
+              : "First-time versus returning customers who booked in this period"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -277,7 +281,7 @@ export function PerformanceMetrics({
             <div className="flex items-center justify-between p-3 rounded-lg bg-white/70">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Repeat Customers</p>
-                <p className="text-xs text-muted-foreground">{repeatCustomerCount}</p>
+                <p className="text-xs text-muted-foreground">{repeatCustomerCount} · {isOverallCustomerRange ? "Multiple bookings" : "Booked before this period"}</p>
               </div>
               <div className="text-right">
                 <p className="text-lg font-bold text-green-600">
@@ -291,7 +295,7 @@ export function PerformanceMetrics({
             <div className="flex items-center justify-between p-3 rounded-lg bg-white/70">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">New Customers</p>
-                <p className="text-xs text-muted-foreground">{newCustomerCount}</p>
+                <p className="text-xs text-muted-foreground">{newCustomerCount} · {isOverallCustomerRange ? "Exactly one booking" : "First booking in this period"}</p>
               </div>
               <div className="text-right">
                 <p className="text-lg font-bold text-green-600">

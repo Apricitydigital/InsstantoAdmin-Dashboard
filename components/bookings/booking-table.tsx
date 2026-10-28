@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
 import { useAuth } from "@/lib/auth"
+import { isRealBookingRecord } from "@/lib/booking-scope"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -82,8 +83,6 @@ type SortField = "bookingDate" | "timeSlot"
 
 const PAGE_SIZE = 20
 const FIRESTORE_IN_LIMIT = 30
-
-const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
 
 const toAmount = (value: unknown) => {
   const amount = Number(value)
@@ -408,12 +407,7 @@ export function BookingTable({ fromDate, toDate }: BookingTableProps) {
       const cust = customerMap[b.customer_id?.path ?? ""] || {}
       const prov = providerMap[b.provider_id?.path ?? ""] || {}
 
-      const providerId = b.provider_id?.id
-      const customerId = b.customer_id?.id
-
-      const isRealBooking =
-        customerId !== INTERNAL_CUSTOMER_ID &&
-        (!providerId || onboardedPartnerIds.has(providerId))
+      const isRealBooking = isRealBookingRecord(b, onboardedPartnerIds)
 
       const matchesBookingType =
         bookingTypeFilter.length === 0 ||

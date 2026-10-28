@@ -5,8 +5,9 @@ import { CalendarDays, ListChecks, UserPlus, Users } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { fetchCustomerStats } from "@/lib/queries/customers"
+import { OVERALL_BOOKING_START_DATE } from "@/lib/queries/customer-cohorts"
 
-type Stats = { totalCustomers: number; newCustomersToday: number; customersWithOneBooking: number; customersWithMultipleBookings: number }
+type Stats = { totalCustomers: number; newCustomersToday: number; newCustomerCount: number; repeatCustomerCount: number }
 
 interface CustomerStatsProps { fromDate: string; toDate: string }
 
@@ -28,11 +29,12 @@ export function CustomerStats({ fromDate, toDate }: CustomerStatsProps) {
     return () => { active = false }
   }, [fromDate, toDate])
 
+  const isOverall = fromDate === OVERALL_BOOKING_START_DATE
   const items = [
     { title: "Total sign-ups", value: stats?.totalCustomers ?? 0, description: "Registered in this period" },
     { title: "Today's sign-ups", value: stats?.newCustomersToday ?? 0, description: "New accounts today" },
-    { title: "New customers", value: stats?.customersWithOneBooking ?? 0, description: "Exactly one booking" },
-    { title: "Repeat customers", value: stats?.customersWithMultipleBookings ?? 0, description: "Multiple bookings" },
+    { title: "New customers", value: stats?.newCustomerCount ?? 0, description: isOverall ? "Exactly one booking" : "First booking in this period" },
+    { title: "Repeat customers", value: stats?.repeatCustomerCount ?? 0, description: isOverall ? "Multiple bookings" : "Booked before this period" },
   ]
 
   return (

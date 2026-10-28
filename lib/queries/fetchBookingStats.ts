@@ -7,9 +7,16 @@ import {
     Timestamp
 } from "firebase/firestore"
 import { getFirestoreDb } from "@/lib/firebase"
+import { isRealBookingRecord } from "@/lib/booking-scope"
+import {
+    isAcceptedBookingStatus,
+    isActiveBookingStatus,
+    isCancelledBookingStatus,
+    isCompletedBookingStatus,
+    isPendingBookingStatus,
+    isRevenueEligibleBookingStatus,
+} from "@/lib/booking-status"
 import { getOnboardedPartnerIds } from "@/lib/queries/partners"
-
-const INTERNAL_CUSTOMER_ID = "aZ0kM3TQB1TuDq52bS7AEeVWQ6V2"
 
 export type BookingStats = {
     totalBookings: number
@@ -17,7 +24,6 @@ export type BookingStats = {
     confirmedBookings: number
     completedBookings: number
     cancelledBookings: number
-    cancelledByCustomer: number
     totalRevenue: number
     averageRating: number
     totalRatingsCount: number
@@ -37,7 +43,7 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
         filters.push(where("date", ">=", Timestamp.fromDate(startDate)))
     }
     if (toDate) {
-        const endDate = new Date(toDate + "T23:59:59")
+        const endDate = new Date(toDate + "T23:59:59.999")
         filters.push(where("date", "<=", Timestamp.fromDate(endDate)))
     }
 
@@ -45,36 +51,33 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
     const bookingSnapshot = await getDocs(query(bookingsCol, ...filters))
     const realBookings = bookingSnapshot.docs
         .map(bookingDoc => bookingDoc.data() as {
-            provider_id?: { id?: string } | null
-            customer_id?: { id?: string } | null
+            provider_id?: { id?: string } | string | null
+            customer_id?: { id?: string } | string | null
             status?: string
-            amount_paid?: number
-            walletAmountUsed?: number
-            discount_amount?: number
+            amount_paid?: number | string
+            walletAmountUsed?: number | string
+            discount_amount?: number | string
         })
-        .filter(booking => {
-            const providerId = booking.provider_id?.id
-            const customerId = booking.customer_id?.id
+        .filter(booking => isRealBookingRecord(booking, onboardedPartnerIdSet))
 
-            return !!providerId &&
-                onboardedPartnerIdSet.has(providerId) &&
-                customerId !== INTERNAL_CUSTOMER_ID
-        })
-
-    const total = realBookings.length
-    const pending = realBookings.filter(booking => booking.status === "Pending").length
-    const confirmed = realBookings.filter(booking => booking.status === "Accepted").length
+    const total = realBookings.filter(booking => isActiveBookingStatus(booking.status)).length
+    const pending = realBookings.filter(booking => isPendingBookingStatus(booking.status)).length
+    const confirmed = realBookings.filter(booking => isAcceptedBookingStatus(booking.status)).length
     const completedBookings = realBookings.filter(
-        booking => booking.status === "Service_Completed"
+        booking => isCompletedBookingStatus(booking.status)
     )
     const completed = completedBookings.length
-    const cancelled = realBookings.filter(booking => booking.status === "Cancelled").length
-    const cancelledByCustomer = cancelled
-    const totalRevenue = completedBookings.reduce(
+    const cancelled = realBookings.filter(booking => isCancelledBookingStatus(booking.status)).length
+    const revenueBookings = realBookings.filter(booking => isRevenueEligibleBookingStatus(booking.status))
+    const toNumber = (value: unknown) => {
+        const number = Number(value)
+        return Number.isFinite(number) ? number : 0
+    }
+    const totalRevenue = revenueBookings.reduce(
         (sum, booking) => sum
-            + (booking.amount_paid || 0)
-            + (booking.walletAmountUsed || 0)
-            + (booking.discount_amount || 0),
+            + toNumber(booking.amount_paid)
+            + toNumber(booking.walletAmountUsed)
+            + toNumber(booking.discount_amount),
         0
     )
 
@@ -140,7 +143,6 @@ export async function fetchBookingStats(fromDate?: string, toDate?: string): Pro
         confirmedBookings: confirmed,
         completedBookings: completed,
         cancelledBookings: cancelled,
-        cancelledByCustomer,
         totalRevenue,
         averageRating: Number(averageRating.toFixed(2)),
         totalRatingsCount: ratingCount,

@@ -23,6 +23,7 @@ import { collection, query, where, getDocs, Timestamp } from "firebase/firestore
 import { getFirestoreDb } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
 import { getOnboardedPartnerIdSet } from "@/lib/queries/partners"
+import { isRevenueEligibleBookingStatus } from "@/lib/booking-status"
 
 interface GraphPlaceholderProps {
   title: string
@@ -111,7 +112,7 @@ export function GraphPlaceholder({
       const b = docSnap.data() as any
       const providerId = b?.provider_id?.id || b?.provider_id
       if (!onboardedPartnerIds.has(providerId)) return
-      if (b?.status !== "Service_Completed") return
+      if (!isRevenueEligibleBookingStatus(b?.status)) return
       if (b?.customer_id?.id === INTERNAL_CUSTOMER_ID) return
 
       const when: Date | null = b?.date?.toDate?.() || null

@@ -7,11 +7,11 @@ import {
   query,
   where,
   Timestamp,
-  DocumentData,
   doc,
   QueryConstraint,
 } from "firebase/firestore";
 import { getFirestoreDb } from "@/lib/firebase";
+import { fetchCustomerBookingCohorts } from "@/lib/queries/customer-cohorts";
 import { getOnboardedPartnerIds } from "@/lib/queries/partners";
 
 export interface CustomerStats {
@@ -62,73 +62,10 @@ export async function fetchNewVsRepeatCustomers(
 
   const totalCustomersSnapshot = await getCountFromServer(customersQuery);
   const totalCustomers = totalCustomersSnapshot.data().count || 0;
-
-  const customerSnapshot = await getDocs(customersQuery);
-
-  const customerIds = customerSnapshot.docs.map((docSnap) => docSnap.id);
-
-  if (customerIds.length === 0) {
-    return {
-      totalCustomers,
-      newCustomerCount: 0,
-      repeatCustomerCount: 0,
-      averageRating: 0,
-      totalRatings: 0,
-    };
-  }
+  const cohorts = await fetchCustomerBookingCohorts(fromDate || "", toDate || "");
 
   /* -------------------------------------------------------------------------- */
-  /*              2. Fetch completed bookings of selected customers              */
-  /* -------------------------------------------------------------------------- */
-
-  const bookingCount: Record<string, number> = {};
-  const batchSize = 10;
-
-  const bookingQueries = [];
-
-  for (let i = 0; i < customerIds.length; i += batchSize) {
-    const batch = customerIds.slice(i, i + batchSize);
-    const customerRefs = batch.map((id) => doc(db, "customer", id));
-
-    const bookingQuery = query(
-      collection(db, "bookings"),
-      where("status", "==", "Service_Completed"),
-      where("customer_id", "in", customerRefs)
-    );
-
-    bookingQueries.push(getDocs(bookingQuery));
-  }
-
-  const bookingResults = await Promise.all(bookingQueries);
-
-  bookingResults.forEach((snap) => {
-    snap.forEach((docSnap: DocumentData) => {
-      const data = docSnap.data();
-      const customerRef = data.customer_id;
-
-      if (customerRef?.id) {
-        bookingCount[customerRef.id] = (bookingCount[customerRef.id] || 0) + 1;
-      }
-    });
-  });
-
-  /* -------------------------------------------------------------------------- */
-  /*                  3. One booking = New, Multiple = Repeat                    */
-  /* -------------------------------------------------------------------------- */
-
-  let newCustomerCount = 0;
-  let repeatCustomerCount = 0;
-
-  Object.values(bookingCount).forEach((count) => {
-    if (count === 1) {
-      newCustomerCount++;
-    } else if (count > 1) {
-      repeatCustomerCount++;
-    }
-  });
-
-  /* -------------------------------------------------------------------------- */
-  /*                          4. Fetch partner ratings                           */
+  /*                          2. Fetch partner ratings                           */
   /* -------------------------------------------------------------------------- */
 
   const reviewsCol = collection(db, "reviews");
@@ -166,8 +103,8 @@ export async function fetchNewVsRepeatCustomers(
 
   return {
     totalCustomers,
-    newCustomerCount,
-    repeatCustomerCount,
+    newCustomerCount: cohorts.newCustomerCount,
+    repeatCustomerCount: cohorts.repeatCustomerCount,
     averageRating: Number(averageRating.toFixed(2)),
     totalRatings: ratingCount,
   };

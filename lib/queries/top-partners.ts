@@ -9,6 +9,7 @@ import {
 } from "firebase/firestore"
 
 import { getFirestoreDb } from "@/lib/firebase"
+import { isActiveBookingStatus } from "@/lib/booking-status"
 import {
   getOnboardedPartnerIds,
   ONBOARDED_PARTNER_STATUS,
@@ -77,6 +78,7 @@ export async function fetchTopPartners(): Promise<TopPartner[]> {
       const data = bookingDocument.data()
       const partnerId = data.provider_id?.id || data.provider_id
       if (!partnerIdSet.has(partnerId)) return
+      if (!isActiveBookingStatus(data.status)) return
       bookingMap[partnerId] ||= { total: 0, completed: 0 }
       bookingMap[partnerId].total += 1
       if (data.status?.toLowerCase() === "service_completed") {

@@ -21,6 +21,7 @@ import {
 } from "firebase/firestore"
 
 import { getFirestoreDb } from "@/lib/firebase"
+import { isActiveBookingStatus, isRevenueEligibleBookingStatus } from "@/lib/booking-status"
 import {
     Calendar,
     Search,
@@ -468,17 +469,23 @@ export function PartnerBookingsSection({ partnerId, fromDate = "", toDate = "" }
         const completedBookings = filteredByDate.filter(
             b => b.status?.toLowerCase() === "service_completed"
         )
+        const revenueBookings = filteredByDate.filter(
+            b => isRevenueEligibleBookingStatus(b.status)
+        )
+        const activeBookings = filteredByDate.filter(
+            b => isActiveBookingStatus(b.status)
+        )
         return {
-            total: filteredByDate.length,
+            total: activeBookings.length,
             completed: completedBookings.length,
-            revenue: completedBookings.reduce(
+            revenue: revenueBookings.reduce(
                 (sum, b) => sum
                     + toAmount(b.amount_paid)
                     + toAmount(b.walletAmountUsed)
                     + toAmount(b.discount_amount),
                 0
             ),
-            netRevenue: completedBookings.reduce(
+            netRevenue: revenueBookings.reduce(
                 (sum, b) => sum
                     + toAmount(b.amount_paid),
                 0

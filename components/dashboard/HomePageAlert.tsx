@@ -8,11 +8,13 @@ import {
   query,
   where,
   Timestamp,
-  limit,
 } from "firebase/firestore";
 import Link from "next/link";
 import { getFirestoreDb } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth";
+import { isRealBookingRecord } from "@/lib/booking-scope";
+import { isPendingBookingStatus } from "@/lib/booking-status";
+import { getOnboardedPartnerIdSet } from "@/lib/queries/partners";
 
 import {
   Dialog,
@@ -139,8 +141,7 @@ export default function HomePageAlert() {
 
     const bookingQuery = query(
       collection(db, "bookings"),
-      where("bookingStatus", "==", "Pending"),
-      limit(10)
+      where("status", "in", ["Pending", "pending", "PENDING"])
     );
 
     const complaintQuery = query(
@@ -151,38 +152,42 @@ export default function HomePageAlert() {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const twoDaysAgo = new Date();
-    twoDaysAgo.setDate(twoDaysAgo.getDate() - 30);
-    twoDaysAgo.setHours(0, 0, 0, 0);
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 
     const reviewQuery = query(
       collection(db, "reviews"),
       where("createdAt", ">=", Timestamp.fromDate(startOfToday)),
-      orderBy("createdAt", "desc"),
-      limit(10)
+      orderBy("createdAt", "desc")
     );
 
     const paymentQuery = query(
       collection(db, "payments"),
-      where("status", "==", "CAPTURED"),
       where("createdAt", ">=", Timestamp.fromDate(twoDaysAgo)),
-      orderBy("createdAt", "desc"),
-      limit(10)
+      orderBy("createdAt", "desc")
     );
 
     const subscriptionQuery = query(
       collection(db, "Subscription"),
-      where("Status", "==", "Active"),
       where("startDate", ">=", Timestamp.fromDate(twoDaysAgo)),
-      orderBy("startDate", "desc"),
-      limit(10)
+      orderBy("startDate", "desc")
     );
 
-    const unsubBookings = onSnapshot(bookingQuery, (snap) => {
-      bookingCount = snap.size;
-      setBookings(bookingCount);
+    let disposed = false;
+    let unsubBookings = () => {};
+    getOnboardedPartnerIdSet(db).then((onboardedPartnerIds) => {
+      if (disposed) return;
 
-      const items = snap.docs.slice(0, 5).map((doc) => {
+      unsubBookings = onSnapshot(bookingQuery, (snap) => {
+        const pendingBookingDocs = snap.docs.filter((bookingDocument) => {
+          const booking = bookingDocument.data();
+          return isPendingBookingStatus(booking.status) &&
+            isRealBookingRecord(booking, onboardedPartnerIds);
+        });
+
+        bookingCount = pendingBookingDocs.length;
+        setBookings(bookingCount);
+
+        const items = pendingBookingDocs.map((doc) => {
         const data = doc.data() as any;
 
         const createdAt =
@@ -205,10 +210,19 @@ export default function HomePageAlert() {
             "Customer details not available",
           createdAt,
         };
-      });
+        }).sort(
+          (first, second) =>
+            (second.createdAt?.getTime() || 0) - (first.createdAt?.getTime() || 0)
+        ).slice(0, 5);
 
-      setLatestBookings(items);
-      openIfNeeded();
+        setLatestBookings(items);
+        openIfNeeded();
+      });
+    }).catch((error) => {
+      console.error("Unable to load pending booking alerts", error);
+      bookingCount = 0;
+      setBookings(0);
+      setLatestBookings([]);
     });
 
     const unsubComplaints = onSnapshot(complaintQuery, (snap) => {
@@ -295,10 +309,14 @@ export default function HomePageAlert() {
     });
 
     const unsubPayments = onSnapshot(paymentQuery, (snap) => {
-      paymentCount = snap.size;
+      const capturedPaymentDocs = snap.docs.filter(
+        (paymentDocument) =>
+          String(paymentDocument.data().status || "").trim().toUpperCase() === "CAPTURED"
+      );
+      paymentCount = capturedPaymentDocs.length;
       setPayments(paymentCount);
 
-      const items = snap.docs.slice(0, 5).map((doc) => {
+      const items = capturedPaymentDocs.slice(0, 5).map((doc) => {
         const data = doc.data() as any;
 
         const createdAt =
@@ -321,10 +339,14 @@ export default function HomePageAlert() {
     });
 
     const unsubSubscriptions = onSnapshot(subscriptionQuery, (snap) => {
-      subscriptionCount = snap.size;
+      const activeSubscriptionDocs = snap.docs.filter(
+        (subscriptionDocument) =>
+          String(subscriptionDocument.data().Status || "").trim().toLowerCase() === "active"
+      );
+      subscriptionCount = activeSubscriptionDocs.length;
       setSubscriptions(subscriptionCount);
 
-      const items = snap.docs.slice(0, 5).map((doc) => {
+      const items = activeSubscriptionDocs.slice(0, 5).map((doc) => {
         const data = doc.data() as any;
 
         const createdAt = getTimestampDate(data.startDate);
@@ -400,6 +422,7 @@ export default function HomePageAlert() {
     }
 
     return () => {
+      disposed = true;
       unsubBookings();
       unsubComplaints();
       unsubReviews();

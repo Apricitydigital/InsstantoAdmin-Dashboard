@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getFirestoreDb } from "@/lib/firebase"
+import { isActiveBookingStatus } from "@/lib/booking-status"
 import { cacheCustomerNavigationPreview, readCustomerNavigationPreview } from "@/lib/customer-navigation-cache"
 
 const TabLoading = () => <div className="h-56 animate-pulse rounded-xl bg-slate-100" />
@@ -163,6 +164,7 @@ export default function CustomerDetailsPage() {
   const phone = customer?.phone_number || (customer?.contact_no ? String(customer.contact_no) : "Not provided")
   const address = formatCustomerAddress(customer?.address)
   const completedBookings = bookings.filter((booking) => ["completed", "service_completed"].includes(booking.status?.toLowerCase() || ""))
+  const activeBookings = bookings.filter((booking) => isActiveBookingStatus(booking.status))
   const totalSpent = completedBookings.reduce((total, booking) => total + (booking.amount_paid || 0), 0)
 
   const shell = (content: React.ReactNode) => (
@@ -201,7 +203,7 @@ export default function CustomerDetailsPage() {
   }
 
   const stats = [
-    { label: "Total bookings", value: bookings.length.toLocaleString(), hint: "All booking activity", icon: CalendarDays, style: "bg-blue-50 text-blue-600" },
+    { label: "Total bookings", value: activeBookings.length.toLocaleString(), hint: "Active and completed", icon: CalendarDays, style: "bg-blue-50 text-blue-600" },
     { label: "Completed", value: completedBookings.length.toLocaleString(), hint: "Successfully delivered", icon: CheckCircle2, style: "bg-emerald-50 text-emerald-600" },
     { label: "Total spent", value: formatCurrency(totalSpent), hint: "Completed bookings", icon: TrendingUp, style: "bg-violet-50 text-violet-600" },
     { label: "Wallet balance", value: walletLoading ? "Loading…" : formatCurrency(walletInfo?.credit_balance), hint: "Available credits", icon: Wallet, style: "bg-amber-50 text-amber-600" },
